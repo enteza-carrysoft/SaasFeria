@@ -264,7 +264,7 @@ Cada dispositivo hace login y verifica que llega a la pantalla correcta.
 *Hacer esto antes del cierre de cuenta para poder recibir la notificación de cobro.*
 
 1. En la pestaña "Mi Cuenta", buscar el card del total
-2. Pulsar el icono **🔔 "Activar notificaciones de cobro"**
+2. Pulsar el icono **🔔 "Activar notificaciones"**
 3. El navegador solicita permiso → pulsar **"Permitir"**
 4. **Resultado esperado:**
    - El botón cambia a 🔕 (notificaciones activas)

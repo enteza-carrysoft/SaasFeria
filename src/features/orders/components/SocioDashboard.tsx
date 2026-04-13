@@ -254,7 +254,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                                     className="flex items-center gap-2 mx-auto text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
                                                 >
                                                     <BellOff className="w-3.5 h-3.5" />
-                                                    Desactivar notificaciones
+                                                    Notificaciones activas — desactivar
                                                 </button>
                                             ) : (
                                                 <button
@@ -262,7 +262,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                                     className="flex items-center gap-2 mx-auto text-xs text-[var(--color-accent)] hover:text-[var(--color-accent)]/80 font-bold transition-colors"
                                                 >
                                                     <Bell className="w-3.5 h-3.5" />
-                                                    Activar notificaciones de cobro
+                                                    Activar notificaciones
                                                 </button>
                                             )}
                                         </div>

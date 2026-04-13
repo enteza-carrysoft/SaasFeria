@@ -192,7 +192,7 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
                                             onClick={() => handleMarkServed([item.id])}
                                             disabled={isLoading}
                                             className="flex-shrink-0 h-8 w-8 rounded-full bg-[var(--color-success)]/20 hover:bg-[var(--color-success)] text-[var(--color-success)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-40"
-                                            title="Marcar listo"
+                                            title="Marcar listo y avisar al socio si es el último"
                                         >
                                             {isLoading ? (
                                                 <span className="text-xs animate-spin">⟳</span>
@@ -206,17 +206,21 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
                         </div>
 
                         {/* Footer: Todo Listo */}
-                        {group.items.length > 1 && (
-                            <div className="px-4 py-3 border-t border-[var(--color-border)]">
+                        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+                            {group.items.length > 1 ? (
                                 <button
                                     onClick={() => handleMarkServed(allIds)}
                                     disabled={allLoading}
-                                    className="w-full py-2 rounded-xl bg-[var(--color-success)] hover:bg-[var(--color-success)]/80 text-white font-bold text-sm transition-colors disabled:opacity-40"
+                                    className="w-full py-2 rounded-xl bg-[var(--color-success)] hover:bg-[var(--color-success)]/80 text-white font-bold text-sm transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
                                 >
-                                    {allLoading ? 'Procesando...' : '✓ Todo Listo'}
+                                    {allLoading ? 'Avisando...' : '✓ Todo listo — Avisar al socio 🔔'}
                                 </button>
-                            </div>
-                        )}
+                            ) : (
+                                <p className="text-[10px] text-center text-[var(--color-muted-foreground)]">
+                                    Al marcar ✓ se avisa automáticamente al socio 🔔
+                                </p>
+                            )}
+                        </div>
                     </div>
                 );
             })}

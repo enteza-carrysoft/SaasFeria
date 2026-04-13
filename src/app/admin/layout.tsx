@@ -58,13 +58,18 @@ export default async function AdminLayout({
                         ⚙️ Configuración
                     </Link>
                 </nav>
-                <div className="p-4 border-t border-[var(--color-border)] flex flex-col gap-4">
+                <div className="p-4 border-t border-[var(--color-border)] flex flex-col gap-3">
                     <div className="flex justify-center">
                         <ThemeToggle />
                     </div>
                     <Link href="/app" className="block w-full text-center px-4 py-2 bg-[var(--color-muted)] hover:bg-[var(--color-border)] rounded-lg text-sm transition-colors">
                         ← Volver a Routing
                     </Link>
+                    <form action="/auth/signout" method="POST">
+                        <button type="submit" className="w-full px-4 py-2 rounded-lg text-sm border border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors text-[var(--color-muted-foreground)]">
+                            Cerrar Sesión
+                        </button>
+                    </form>
                 </div>
             </aside>
 

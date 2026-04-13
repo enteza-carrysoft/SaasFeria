@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { addLineItems, closeSession, paySession } from '../actions';
+import { markItemsServed } from '@/features/kitchen/actions';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/shared/lib/supabase';
-import { Upload, CreditCard, Banknote } from 'lucide-react';
+import { Upload, Banknote, Bell } from 'lucide-react';
 
 interface SessionDetailProps {
     session: any;
@@ -17,6 +18,7 @@ interface SessionDetailProps {
 export function SessionDetail({ session: initialSession, lines: initialLines, menuItems, categories }: SessionDetailProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [servingIds, setServingIds] = useState<Set<string>>(new Set());
     const [cart, setCart] = useState<{ menu_item_id: string; qty: number; unit_price: number; name: string }[]>([]);
     const [session, setSession] = useState(initialSession);
     const [lines, setLines] = useState(initialLines);
@@ -38,6 +40,13 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                 (payload) => {
                     const menuItem = menuItems.find((m: any) => m.id === payload.new.menu_item_id);
                     setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } }]);
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${initialSession.id}` },
+                (payload) => {
+                    setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } : l));
                 }
             )
             .on(
@@ -126,6 +135,27 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
         }
     };
 
+    const handleMarkMobileServed = useCallback(async (ids: string[]) => {
+        setServingIds(prev => new Set([...prev, ...ids]));
+        // Optimistic: mark as served locally
+        setLines(prev => prev.map(l => ids.includes(l.id) ? { ...l, state: 'served' } : l));
+        try {
+            await markItemsServed(ids);
+        } catch (e: any) {
+            // Revert on error
+            setLines(prev => prev.map(l => ids.includes(l.id) ? { ...l, state: 'pending' } : l));
+            alert('Error al marcar como servido: ' + e.message);
+        } finally {
+            setServingIds(prev => {
+                const next = new Set(prev);
+                ids.forEach(id => next.delete(id));
+                return next;
+            });
+        }
+    }, []);
+
+    const pendingMobileLines = lines.filter((l: any) => l.source === 'mobile' && l.state === 'pending');
+    const servedLines = lines.filter((l: any) => l.state === 'served');
     const totalCart = cart.reduce((acc, c) => acc + (c.qty * c.unit_price), 0);
     const hasUnsentItems = cart.length > 0;
 
@@ -212,14 +242,58 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                         </div>
                     )}
 
+                    {/* Pending mobile orders — camarero must serve these */}
+                    {pendingMobileLines.length > 0 && (
+                        <div className="bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/40 rounded-xl p-3">
+                            <h4 className="text-xs font-bold text-[var(--color-warning)] uppercase mb-3 flex items-center gap-2">
+                                <Bell className="w-3.5 h-3.5" />
+                                Pedidos móviles en cola ({pendingMobileLines.length})
+                            </h4>
+                            <div className="space-y-2 mb-3">
+                                {pendingMobileLines.map((line: any) => {
+                                    const isServing = servingIds.has(line.id);
+                                    return (
+                                        <div key={line.id} className="flex items-center justify-between gap-2 text-sm">
+                                            <span className="text-[var(--color-muted-foreground)] w-6 flex-shrink-0">{line.qty}x</span>
+                                            <span className="flex-1 truncate font-medium">{line.menu_items?.name}</span>
+                                            <button
+                                                onClick={() => handleMarkMobileServed([line.id])}
+                                                disabled={isServing}
+                                                className="flex-shrink-0 h-7 w-7 rounded-full bg-[var(--color-success)]/20 hover:bg-[var(--color-success)] text-[var(--color-success)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-40 text-sm"
+                                                title="Marcar como servido"
+                                            >
+                                                {isServing ? '⟳' : '✓'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {pendingMobileLines.length > 1 && (
+                                <button
+                                    onClick={() => handleMarkMobileServed(pendingMobileLines.map((l: any) => l.id))}
+                                    disabled={pendingMobileLines.every((l: any) => servingIds.has(l.id))}
+                                    className="w-full py-2 rounded-lg bg-[var(--color-success)] hover:bg-[var(--color-success)]/80 text-white font-bold text-xs transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                                >
+                                    <Bell className="w-3.5 h-3.5" />
+                                    ✓ Todo listo — Avisar al socio
+                                </button>
+                            )}
+                            {pendingMobileLines.length === 1 && (
+                                <p className="text-[10px] text-[var(--color-warning)]/70 mt-1 text-center">
+                                    Al marcar ✓ se avisa automáticamente al socio
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {/* Fired Items (Lines in DB) */}
                     <div className="space-y-4">
                         <h4 className="text-xs font-bold text-[var(--color-muted-foreground)] uppercase">Consumos Registrados</h4>
-                        {lines.length === 0 && !hasUnsentItems && (
+                        {servedLines.length === 0 && !hasUnsentItems && pendingMobileLines.length === 0 && (
                             <p className="text-sm text-[var(--color-muted-foreground)] italic">Mesa vacía. Añade productos.</p>
                         )}
                         <div className="space-y-2">
-                            {lines.map(line => (
+                            {servedLines.map((line: any) => (
                                 <div key={line.id} className="flex justify-between items-center text-sm py-1 border-b border-white/5">
                                     <span className="text-[var(--color-muted-foreground)] w-6">{line.qty}x</span>
                                     <span className="flex-1 truncate px-2">{line.menu_items?.name}</span>

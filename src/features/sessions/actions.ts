@@ -30,7 +30,7 @@ export async function getSessionLines(sessionId: string) {
     const { data: lines, error } = await supabase
         .from('line_items')
         .select(`
-            id, session_id, menu_item_id, qty, unit_price, state, created_at,
+            id, session_id, menu_item_id, qty, unit_price, state, source, created_at,
             menu_items (name)
         `)
         .eq('session_id', sessionId)

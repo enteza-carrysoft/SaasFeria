@@ -25,7 +25,7 @@ export default async function KitchenLayout({
 
     const staff = staffData as { display_name: string; staff_role: string; booth_id: string } | null;
 
-    if (!staff || (staff.staff_role !== 'kitchen' && staff.staff_role !== 'owner')) {
+    if (!staff || !['kitchen', 'owner', 'waiter'].includes(staff.staff_role)) {
         redirect('/app');
     }
 
