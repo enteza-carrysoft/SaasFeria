@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { placeMobileOrder } from '../actions';
-import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff } from 'lucide-react';
+import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
 
 interface SocioDashboardProps {
@@ -32,6 +32,16 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [session, setSession] = useState<any | null>(initialSession);
     const [lines, setLines] = useState(initialLines);
     const [notifStatus, setNotifStatus] = useState<'unsupported' | 'denied' | 'default' | 'granted'>('unsupported');
+    const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
+
+    const toggleCategory = (catId: string) => {
+        setOpenCategories(prev => {
+            const next = new Set(prev);
+            if (next.has(catId)) next.delete(catId);
+            else next.add(catId);
+            return next;
+        });
+    };
 
     // Sync state when server re-renders
     useEffect(() => { setSession(initialSession); }, [initialSession]);
@@ -324,49 +334,69 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                             </div>
                         ) : (
                             <>
-                                {/* Menu by Category */}
-                                <div className="pb-32">
+                                {/* Menu by Category — accordion */}
+                                <div className="pb-32 divide-y divide-[var(--color-border)]">
                                     {categories.map((cat: any) => {
                                         const catItems = menuItems.filter((m: any) => m.category_id === cat.id);
                                         if (catItems.length === 0) return null;
+                                        const isOpen = openCategories.has(cat.id);
+                                        const catInCart = catItems.reduce((sum, item) => {
+                                            const c = cart.find(c => c.menu_item_id === item.id);
+                                            return sum + (c?.qty || 0);
+                                        }, 0);
                                         return (
                                             <div key={cat.id}>
-                                                <h3 className="sticky top-0 bg-[var(--color-background)] px-4 py-2 text-xs font-bold uppercase text-[var(--color-muted-foreground)] tracking-wider border-b border-[var(--color-border)] z-[5]">
-                                                    {cat.name}
-                                                </h3>
-                                                <div className="divide-y divide-[var(--color-border)]">
-                                                    {catItems.map((item: any) => {
-                                                        const cartItem = cart.find(c => c.menu_item_id === item.id);
-                                                        const qty = cartItem?.qty || 0;
-                                                        return (
-                                                            <div key={item.id} className="flex items-center justify-between px-4 py-3">
-                                                                <div className="flex-1 min-w-0 pr-4">
-                                                                    <p className="font-semibold text-sm truncate">{item.name}</p>
-                                                                    <p className="text-[var(--color-secondary)] font-bold text-sm mt-0.5">{Number(item.price).toFixed(2)}€</p>
+                                                <button
+                                                    onClick={() => toggleCategory(cat.id)}
+                                                    className="w-full flex items-center justify-between px-4 py-4 bg-[var(--color-card)] hover:bg-[var(--color-muted)] active:bg-[var(--color-muted)] transition-colors"
+                                                >
+                                                    <span className="font-bold text-sm uppercase tracking-wider">{cat.name}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        {catInCart > 0 && (
+                                                            <span className="w-5 h-5 bg-[var(--color-primary)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                                                {catInCart}
+                                                            </span>
+                                                        )}
+                                                        <ChevronDown
+                                                            className={`w-4 h-4 text-[var(--color-muted-foreground)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                                                        />
+                                                    </div>
+                                                </button>
+                                                {isOpen && (
+                                                    <div className="divide-y divide-[var(--color-border)] bg-[var(--color-background)]">
+                                                        {catItems.map((item: any) => {
+                                                            const cartItem = cart.find(c => c.menu_item_id === item.id);
+                                                            const qty = cartItem?.qty || 0;
+                                                            return (
+                                                                <div key={item.id} className="flex items-center justify-between px-4 py-3">
+                                                                    <div className="flex-1 min-w-0 pr-4">
+                                                                        <p className="font-semibold text-sm truncate">{item.name}</p>
+                                                                        <p className="text-[var(--color-secondary)] font-bold text-sm mt-0.5">{Number(item.price).toFixed(2)}€</p>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {qty > 0 && (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => removeFromCart(item.id)}
+                                                                                    className="w-8 h-8 rounded-full bg-[var(--color-muted)] flex items-center justify-center active:scale-90 transition-transform"
+                                                                                >
+                                                                                    <Minus className="w-4 h-4" />
+                                                                                </button>
+                                                                                <span className="w-6 text-center font-bold text-sm">{qty}</span>
+                                                                            </>
+                                                                        )}
+                                                                        <button
+                                                                            onClick={() => addToCart(item)}
+                                                                            className="w-8 h-8 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center active:scale-90 transition-transform shadow-md"
+                                                                        >
+                                                                            <Plus className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    {qty > 0 && (
-                                                                        <>
-                                                                            <button
-                                                                                onClick={() => removeFromCart(item.id)}
-                                                                                className="w-8 h-8 rounded-full bg-[var(--color-muted)] flex items-center justify-center active:scale-90 transition-transform"
-                                                                            >
-                                                                                <Minus className="w-4 h-4" />
-                                                                            </button>
-                                                                            <span className="w-6 text-center font-bold text-sm">{qty}</span>
-                                                                        </>
-                                                                    )}
-                                                                    <button
-                                                                        onClick={() => addToCart(item)}
-                                                                        className="w-8 h-8 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center active:scale-90 transition-transform shadow-md"
-                                                                    >
-                                                                        <Plus className="w-4 h-4" />
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
