@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* CasetaApp Light Palette */
+  --color-background: #f8f9fa;
+  --color-foreground: #111827;
+  --color-card: #ffffff;
+  --color-card-foreground: #1f2937;
+  --color-primary: #e94560;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #533483;
+  --color-secondary-foreground: #f0e0ff;
+  --color-accent: #f5a623;
+  --color-accent-foreground: #111827;
+  --color-muted: #e5e7eb;
+  --color-muted-foreground: #6b7280;
+  --color-border: #d1d5db;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Spacing & Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* Shadows */
+  --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-glow: 0 0 20px rgba(233, 69, 96, 0.15);
+}
+
+.dark {
+  /* CasetaApp Design Tokens — Feria-inspired palette */
+  --color-background: #0f0f1a;
+  --color-foreground: #f0f0f5;
+  --color-card: #1a1a2e;
+  --color-card-foreground: #e0e0ec;
+  --color-primary: #e94560;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #533483;
+  --color-secondary-foreground: #f0e0ff;
+  --color-accent: #f5a623;
+  --color-accent-foreground: #1a1a2e;
+  --color-muted: #2a2a40;
+  --color-muted-foreground: #a0a0b8;
+  --color-border: #2e2e48;
+  --color-success: #2ed573;
+  --color-warning: #f5a623;
+  --color-danger: #e94560;
+  --color-info: #3742fa;
+
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  min-height: 100dvh;
+}
+
+/* Utility: glass card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.dark .glass-card {
+  background: rgba(26, 26, 46, 0.8);
+}
+
+/* Button base for large touchable areas (staff UI) */
+.btn-touch {
+  min-height: 56px;
+  min-width: 56px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.btn-touch:active {
+  transform: scale(0.96);
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-open {
+  background: var(--color-success);
+  color: #1a1a2e;
+}
+
+.badge-closing {
+  background: var(--color-warning);
+  color: #1a1a2e;
+}
+
+.badge-closed {
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+}
+
+.badge-voided {
+  background: var(--color-danger);
+  color: white;
+}
+
+/* Smooth page transitions */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Pulse glow for "ready" state */
+@keyframes pulseGlow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(46, 213, 115, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 24px rgba(46, 213, 115, 0.6);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 1.5s ease-in-out infinite;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}
