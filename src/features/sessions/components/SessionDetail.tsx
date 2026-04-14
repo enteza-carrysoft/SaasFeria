@@ -171,7 +171,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                         ← Volver
                     </Link>
                     <div>
-                        <h2 className="text-2xl font-black text-[var(--color-secondary)]">Socio #{session.socios?.socio_number}</h2>
+                        <h2 className="text-2xl font-black text-white">Socio #{session.socios?.socio_number}</h2>
                         <p className="text-sm text-[var(--color-muted-foreground)]">{session.socios?.display_name}</p>
                     </div>
                     {session.status === 'closing' && (
@@ -205,7 +205,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                                 className="bg-gradient-to-b from-[var(--color-card)] to-[#151a21] border border-[var(--color-border)] p-4 rounded-xl flex flex-col items-start justify-between h-28 hover:border-[var(--color-primary)] transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-left"
                             >
                                 <span className="font-bold text-sm leading-tight text-[var(--color-foreground)] line-clamp-2">{item.name}</span>
-                                <span className="text-[var(--color-secondary)] font-bold mt-2">{Number(item.price).toFixed(2)}€</span>
+                                <span className="text-[var(--color-accent)] font-bold mt-2">{Number(item.price).toFixed(2)}€</span>
                             </button>
                         ))}
                     </div>
@@ -298,7 +298,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                                 <div key={line.id} className="flex justify-between items-center text-sm py-1 border-b border-white/5">
                                     <span className="text-[var(--color-muted-foreground)] w-6">{line.qty}x</span>
                                     <span className="flex-1 truncate px-2">{line.menu_items?.name}</span>
-                                    <span className="font-mono text-[var(--color-secondary)]">{(line.qty * line.unit_price).toFixed(2)}€</span>
+                                    <span className="font-mono text-[var(--color-accent)]">{(line.qty * line.unit_price).toFixed(2)}€</span>
                                 </div>
                             ))}
                         </div>

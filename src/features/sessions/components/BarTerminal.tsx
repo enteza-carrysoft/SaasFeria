@@ -115,43 +115,41 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                         <p className="text-xl">No hay cuentas abiertas</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                    <div className="flex flex-wrap gap-3">
                         {filteredSessions.map((session) => {
                             const mobilePending = mobilePendingCounts[session.id] ?? 0;
+                            const cardStyle =
+                                session.status !== 'open'
+                                    ? 'bg-[var(--color-warning)] text-gray-900 border-yellow-500 animate-pulse'
+                                    : mobilePending > 0
+                                        ? 'bg-gradient-to-br from-amber-500/30 to-amber-900/20 border-amber-400/80 shadow-[0_0_14px_rgba(245,166,35,0.35)]'
+                                        : 'bg-gradient-to-br from-[var(--color-card)] to-[#151a21] border-[var(--color-border)] hover:border-[var(--color-accent)]';
                             return (
                                 <Link
                                     href={`/bar/session/${session.id}`}
                                     key={session.id}
-                                    className={`
-                                        relative flex flex-col aspect-square p-4 rounded-2xl shadow-lg border transition-all hover:scale-105 active:scale-95
-                                        ${session.status === 'open'
-                                            ? 'bg-gradient-to-br from-[var(--color-card)] to-[#151a21] border-[var(--color-border)] hover:border-[var(--color-accent)]'
-                                            : 'bg-[var(--color-warning)] text-gray-900 border-yellow-500 animate-pulse'
-                                        }
-                                    `}
+                                    className={`relative flex flex-col w-[150px] h-[90px] p-3 rounded-xl shadow-lg border transition-all hover:scale-105 active:scale-95 ${cardStyle}`}
                                 >
-                                    {/* Mobile pending orders badge */}
-                                    {mobilePending > 0 && (
-                                        <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 bg-[var(--color-accent)] text-white text-[11px] font-black rounded-full flex items-center justify-center shadow-lg z-10 animate-bounce">
-                                            {mobilePending}
-                                        </span>
-                                    )}
-
-                                    <div className="absolute top-2 right-2 flex gap-1">
+                                    <div className="absolute top-1.5 right-1.5">
                                         {session.status === 'closing' && (
-                                            <span className="text-[10px] font-bold uppercase bg-black text-white px-2 py-0.5 rounded shadow">
+                                            <span className="text-[9px] font-bold uppercase bg-black text-white px-1.5 py-0.5 rounded shadow">
                                                 Cobrando
                                             </span>
                                         )}
                                     </div>
                                     <div className="mt-auto">
-                                        <h4 className="text-3xl font-black mb-1 text-[var(--color-secondary)] drop-shadow-sm">#{session.socios?.socio_number || '??'}</h4>
-                                        <p className="text-xs opacity-75 truncate">
+                                        {mobilePending > 0 && (
+                                            <p className="text-[10px] font-bold text-amber-300 mb-0.5">
+                                                📱 {mobilePending} pedido{mobilePending > 1 ? 's' : ''}
+                                            </p>
+                                        )}
+                                        <h4 className="text-xl font-black leading-none text-white">#{session.socios?.socio_number || '??'}</h4>
+                                        <p className="text-[10px] opacity-60 truncate mt-0.5">
                                             {session.socio_autorizados?.display_name ?? session.socios?.display_name ?? 'Desconocido'}
                                         </p>
-                                        <div className="mt-4 flex justify-between items-end border-t border-white/10 pt-2">
-                                            <span className="text-xs opacity-50">Total</span>
-                                            <span className="text-lg font-bold">{Number(session.total_amount).toFixed(2)}€</span>
+                                        <div className="mt-2 flex justify-between items-center border-t border-white/10 pt-1.5">
+                                            <span className="text-[9px] opacity-40">Total</span>
+                                            <span className="text-xs font-bold">{Number(session.total_amount).toFixed(2)}€</span>
                                         </div>
                                     </div>
                                 </Link>
