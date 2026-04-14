@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { placeMobileOrder, getSocioSessionLines } from '../actions';
 import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown, Volume2, Image, X } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
@@ -41,7 +42,11 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [sessionLinesCache, setSessionLinesCache] = useState<Record<string, LineItem[]>>({});
     const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+    const router = useRouter();
     const { alert: playAlert } = useAlertSound();
+    // Ref to track the previous session value for Realtime comparisons
+    // (payload.old is empty without REPLICA IDENTITY FULL)
+    const prevSessionRef = useRef<Session | null>(initialSession);
 
     const toggleCategory = (catId: string) => {
         setOpenCategories(prev => {
@@ -53,7 +58,10 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     };
 
     // Sync state when server re-renders
-    useEffect(() => { setSession(initialSession); }, [initialSession]);
+    useEffect(() => {
+        setSession(initialSession);
+        prevSessionRef.current = initialSession;
+    }, [initialSession]);
     useEffect(() => { setLines(initialLines); }, [initialLines]);
 
     // Check notification permission status
@@ -134,9 +142,20 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                         triggerAlert('🍻 El camarero ha abierto tu cuenta', 'account_opened');
                     } else if (payload.eventType === 'UPDATE') {
                         const updated = payload.new as Session;
-                        setSession(prev => prev ? { ...prev, ...updated } : updated);
-                        if (updated.status === 'closing') {
+                        const prev = prevSessionRef.current;
+
+                        // Update state (no side effects inside setter)
+                        setSession(cur => cur ? { ...cur, ...updated } : updated);
+                        prevSessionRef.current = updated;
+
+                        // Fire alerts based on what changed
+                        if (prev !== null && updated.total_amount > prev.total_amount) {
+                            triggerAlert('✅ Pedido servido — importe actualizado', 'order_served');
+                        }
+                        if (updated.status === 'closing' && prev?.status !== 'closing') {
                             triggerAlert('💳 Tu cuenta está lista para pagar', 'account_closing');
+                            // Force re-fetch server props so initialSession also reflects the new status
+                            router.refresh();
                         }
                     }
                 }
@@ -144,7 +163,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [socio.id, triggerAlert]);
+    }, [socio.id, triggerAlert, router]);
 
     // Realtime: watch line_items for the active session (served/pending state changes)
     useEffect(() => {
@@ -165,23 +184,13 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
                 (payload) => {
                     // payload.old is empty without REPLICA IDENTITY FULL — compare with local state instead
-                    setLines(prev => {
-                        const existing = prev.find(l => l.id === payload.new.id);
-                        if (existing?.state === 'pending' && payload.new?.state === 'served') {
-                            const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
-                            // setTimeout to fire alert outside the state setter
-                            setTimeout(() => {
-                                triggerAlert(`✅ Listo: ${menuItem?.name ?? 'Tu pedido'} está servido`, 'order_served');
-                            }, 0);
-                        }
-                        return prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l);
-                    });
+                    setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l));
                 }
             )
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [session?.id, menuItems, triggerAlert]);
+    }, [session?.id, menuItems]);
 
 
     // Cart helpers

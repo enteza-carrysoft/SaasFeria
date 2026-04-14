@@ -160,6 +160,7 @@ export async function closeSession(sessionId: string) {
 
     if (error) throw new Error(error.message);
     revalidatePath('/bar');
+    revalidatePath('/socio');
 
     // Send push notification to the socio
     const socio = sessionData?.socios as unknown as { user_id: string | null; socio_number: number } | null;
