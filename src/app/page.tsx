@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { InstallPWA } from '@/shared/components/InstallPWA';
 
 export default function HomePage() {
     return (
@@ -59,6 +60,11 @@ export default function HomePage() {
                     >
                         Registrarse
                     </Link>
+                </div>
+
+                {/* PWA Install Button — shown automatically when browser allows */}
+                <div className="flex justify-center mt-4">
+                    <InstallPWA />
                 </div>
             </div>
 
