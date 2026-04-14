@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
+import type { StaffUser } from '@/shared/types/domain';
 export default async function BarLayout({
     children,
 }: {
@@ -21,7 +22,7 @@ export default async function BarLayout({
         .eq('is_active', true)
         .single();
 
-    const staffUser = staffData as any;
+    const staffUser = staffData as StaffUser | null;
 
     if (!staffUser || (staffUser.staff_role !== 'waiter' && staffUser.staff_role !== 'owner')) {
         redirect('/app'); // Not authorized, go back to routing

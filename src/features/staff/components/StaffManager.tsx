@@ -30,8 +30,8 @@ export function StaffManager({ boothId, staff, socios }: StaffManagerProps) {
             await addStaff(boothId, newStaffName, newStaffRole, newStaffPin);
             setNewStaffName('');
             setNewStaffPin('');
-        } catch (error: any) {
-            alert('Error: ' + error.message);
+        } catch (error) {
+            alert('Error: ' + (error instanceof Error ? error.message : 'Error'));
         } finally {
             setLoading(false);
         }
@@ -44,8 +44,8 @@ export function StaffManager({ boothId, staff, socios }: StaffManagerProps) {
             await addSocio(boothId, parseInt(newSocioNum), newSocioName);
             setNewSocioNum('');
             setNewSocioName('');
-        } catch (error: any) {
-            alert('Error: ' + error.message);
+        } catch (error) {
+            alert('Error: ' + (error instanceof Error ? error.message : 'Error'));
         } finally {
             setLoading(false);
         }
@@ -64,7 +64,7 @@ export function StaffManager({ boothId, staff, socios }: StaffManagerProps) {
                     </div>
                     <div className="w-full md:w-40">
                         <label className="block text-sm text-[var(--color-muted-foreground)] mb-1">Rol</label>
-                        <select className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded p-2 outline-none" value={newStaffRole} onChange={e => setNewStaffRole(e.target.value as any)}>
+                        <select className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded p-2 outline-none" value={newStaffRole} onChange={e => setNewStaffRole(e.target.value as 'owner' | 'waiter' | 'kitchen')}>
                             <option value="waiter">Camarero</option>
                             <option value="kitchen">Cocina</option>
                             <option value="owner">Gestor</option>
@@ -149,7 +149,7 @@ export function StaffManager({ boothId, staff, socios }: StaffManagerProps) {
                                     <td className="p-4 text-center">
                                         <select
                                             value={s.status}
-                                            onChange={(e) => toggleSocioStatus(s.id, e.target.value as any)}
+                                            onChange={(e) => toggleSocioStatus(s.id, e.target.value as 'active' | 'inactive')}
                                             className={`text-xs uppercase font-bold px-2 py-1 rounded outline-none cursor-pointer ${s.status === 'active' ? 'bg-[var(--color-success)] text-gray-900' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                                                 }`}
                                         >

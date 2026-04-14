@@ -121,7 +121,7 @@ export function CatalogManager({ boothId, categories, items }: CatalogManagerPro
                     </div>
                     <div className="w-full md:w-32">
                         <label className="block text-sm text-[var(--color-muted-foreground)] mb-1">Prep.</label>
-                        <select className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded p-2 outline-none" value={newItemPrep} onChange={e => setNewItemPrep(e.target.value as any)}>
+                        <select className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded p-2 outline-none" value={newItemPrep} onChange={e => setNewItemPrep(e.target.value as 'bar' | 'kitchen')}>
                             <option value="bar">Barra</option>
                             <option value="kitchen">Cocina</option>
                         </select>

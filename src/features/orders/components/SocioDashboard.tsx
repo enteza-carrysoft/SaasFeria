@@ -4,14 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { placeMobileOrder } from '../actions';
 import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
+import type { Socio, Session, LineItem, MenuCategory, MenuItem } from '@/shared/types/domain';
 
 interface SocioDashboardProps {
-    socio: any;
-    session: any | null;
-    lines: any[];
-    categories: any[];
-    menuItems: any[];
-    history: any[];
+    socio: Socio;
+    session: Session | null;
+    lines: LineItem[];
+    categories: MenuCategory[];
+    menuItems: MenuItem[];
+    history: Session[];
 }
 
 type Tab = 'cuenta' | 'pedir' | 'historial';
@@ -29,8 +30,8 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [cart, setCart] = useState<{ menu_item_id: string; qty: number; unit_price: number; name: string }[]>([]);
     const [loading, setLoading] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(false);
-    const [session, setSession] = useState<any | null>(initialSession);
-    const [lines, setLines] = useState(initialLines);
+    const [session, setSession] = useState<Session | null>(initialSession);
+    const [lines, setLines] = useState<LineItem[]>(initialLines);
     const [notifStatus, setNotifStatus] = useState<'unsupported' | 'denied' | 'default' | 'granted'>('unsupported');
     const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
@@ -104,10 +105,10 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 { event: '*', schema: 'public', table: 'sessions', filter: `socio_id=eq.${socio.id}` },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
-                        setSession(payload.new);
+                        setSession(payload.new as Session);
                         setActiveTab('cuenta');
                     } else if (payload.eventType === 'UPDATE') {
-                        setSession((prev: any) => prev ? { ...prev, ...payload.new } : payload.new);
+                        setSession(prev => prev ? { ...prev, ...payload.new as Session } : payload.new as Session);
                     }
                 }
             )
@@ -126,15 +127,15 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
                 (payload) => {
-                    const menuItem = menuItems.find((m: any) => m.id === payload.new.menu_item_id);
-                    setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } }]);
+                    const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
+                    setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } } as LineItem]);
                 }
             )
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
                 (payload) => {
-                    setLines(prev => prev.map((l: any) => l.id === payload.new.id ? { ...l, ...payload.new } : l));
+                    setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l));
                 }
             )
             .subscribe();
@@ -144,7 +145,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
 
 
     // Cart helpers
-    const addToCart = (item: any) => {
+    const addToCart = (item: MenuItem) => {
         setCart(prev => {
             const existing = prev.find(c => c.menu_item_id === item.id);
             if (existing) return prev.map(c => c.menu_item_id === item.id ? { ...c, qty: c.qty + 1 } : c);
@@ -173,8 +174,8 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             setOrderSuccess(true);
             setTimeout(() => setOrderSuccess(false), 3000);
             setActiveTab('cuenta');
-        } catch (e: any) {
-            alert('Error: ' + e.message);
+        } catch (e) {
+            alert('Error: ' + (e instanceof Error ? e.message : 'Error desconocido'));
         } finally {
             setLoading(false);
         }
@@ -186,7 +187,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
 
     // Group menu by category
     const getCategoryName = (catId: string) => {
-        const cat = categories.find((c: any) => c.id === catId);
+        const cat = categories.find(c => c.id === catId);
         return cat?.name || 'Otros';
     };
 
@@ -336,8 +337,8 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                             <>
                                 {/* Menu by Category — accordion */}
                                 <div className="pb-32 divide-y divide-[var(--color-border)]">
-                                    {categories.map((cat: any) => {
-                                        const catItems = menuItems.filter((m: any) => m.category_id === cat.id);
+                                    {categories.map((cat) => {
+                                        const catItems = menuItems.filter(m => m.category_id === cat.id);
                                         if (catItems.length === 0) return null;
                                         const isOpen = openCategories.has(cat.id);
                                         const catInCart = catItems.reduce((sum, item) => {
@@ -364,7 +365,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                                 </button>
                                                 {isOpen && (
                                                     <div className="divide-y divide-[var(--color-border)] bg-[var(--color-background)]">
-                                                        {catItems.map((item: any) => {
+                                                        {catItems.map((item) => {
                                                             const cartItem = cart.find(c => c.menu_item_id === item.id);
                                                             const qty = cartItem?.qty || 0;
                                                             return (
@@ -427,7 +428,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                         {history.length === 0 ? (
                             <p className="text-sm text-[var(--color-muted-foreground)] italic">No hay historial de cuenta aún.</p>
                         ) : (
-                            history.map((s: any) => (
+                            history.map((s) => (
                                 <div key={s.id} className="glass-card p-4 flex flex-col gap-3">
                                     <div className="flex justify-between items-start">
                                         <div>

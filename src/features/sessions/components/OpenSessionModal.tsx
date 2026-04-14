@@ -24,8 +24,8 @@ export function OpenSessionModal({ boothId, onClose, onSuccess }: OpenSessionMod
         try {
             const sessionId = await openSession(boothId, parseInt(socioNumber));
             onSuccess(sessionId);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error al abrir sesión');
         } finally {
             setLoading(false);
         }

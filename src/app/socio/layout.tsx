@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
+import type { Socio } from '@/shared/types/domain';
 
 export default async function SocioLayout({
     children,
@@ -22,7 +23,7 @@ export default async function SocioLayout({
         .eq('status', 'active')
         .single();
 
-    const socio = socioData as any;
+    const socio = socioData as Socio | null;
 
     if (!socio) {
         redirect('/app');

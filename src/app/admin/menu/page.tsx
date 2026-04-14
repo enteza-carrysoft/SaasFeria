@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { getCatalog } from '@/features/catalog/actions';
 import { CatalogManager } from '@/features/catalog/components/CatalogManager';
+import type { StaffUser, MenuCategory, MenuItem } from '@/shared/types/domain';
 
 export const metadata = {
     title: 'Catálogo Admin | CasetaApp',
@@ -19,12 +20,12 @@ export default async function AdminMenuPage() {
         .eq('is_active', true)
         .single();
 
-    const staffUser = staffData as any;
+    const staffUser = staffData as StaffUser;
     const boothId = staffUser.booth_id;
 
     // 2. Fetch Catalog data using the server action helper
-    let categories: any[] = [];
-    let items: any[] = [];
+    let categories: MenuCategory[] = [];
+    let items: MenuItem[] = [];
     try {
         const catalog = await getCatalog(boothId);
         categories = catalog.categories;

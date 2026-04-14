@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { getActiveSessions } from '@/features/sessions/actions';
 import { BarTerminal } from '@/features/sessions/components/BarTerminal';
+import type { MenuItem } from '@/shared/types/domain';
 
 export const metadata = {
     title: 'Terminal Barra | CasetaApp',
@@ -19,7 +20,7 @@ export default async function BarPage() {
         .eq('is_active', true)
         .single();
 
-    const boothId = (staffData as any).booth_id;
+    const boothId = (staffData as { booth_id: string }).booth_id;
 
     // Fetch sessions and mobile pending counts in parallel
     const [sessions, menuData, pendingLineItems] = await Promise.all([
@@ -47,7 +48,7 @@ export default async function BarPage() {
         <BarTerminal
             boothId={boothId}
             initialSessions={sessions}
-            menuItems={menuData.data as any ?? []}
+            menuItems={(menuData.data ?? []) as MenuItem[]}
             mobilePendingCounts={mobilePendingCounts}
         />
     );

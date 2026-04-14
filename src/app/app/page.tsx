@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
+import type { StaffUser, Socio } from '@/shared/types/domain';
 
 export default async function AppPage() {
     const supabase = await createServerSupabaseClient();
@@ -17,7 +18,7 @@ export default async function AppPage() {
         .eq('user_id', user.id)
         .eq('is_active', true)
         .single();
-    const staffUser = staffData as any;
+    const staffUser = staffData as StaffUser | null;
 
     // Check if user is a socio
     const { data: socioData } = await supabase
@@ -26,7 +27,7 @@ export default async function AppPage() {
         .eq('user_id', user.id)
         .eq('status', 'active')
         .single();
-    const socio = socioData as any;
+    const socio = socioData as Socio | null;
 
     // Route based on role
     if (staffUser) {

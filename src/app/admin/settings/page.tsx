@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
+import type { StaffUser } from '@/shared/types/domain';
 
 export const metadata = {
     title: 'Configuración | CasetaApp',
@@ -16,7 +17,7 @@ export default async function AdminSettingsPage() {
         .eq('is_active', true)
         .single();
 
-    const boothId = (staffData as any).booth_id;
+    const boothId = (staffData as StaffUser).booth_id;
 
     // Fetch the actual booth name
     const { data: booth } = await supabase

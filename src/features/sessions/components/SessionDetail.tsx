@@ -7,12 +7,13 @@ import { markItemsServed } from '@/features/kitchen/actions';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/shared/lib/supabase';
 import { Upload, Banknote, Bell } from 'lucide-react';
+import type { Session, LineItem, MenuItem, MenuCategory } from '@/shared/types/domain';
 
 interface SessionDetailProps {
-    session: any;
-    lines: any[];
-    menuItems: any[];
-    categories: { id: string; name: string; sort_order: number }[];
+    session: Session & { socios?: { socio_number: number; display_name: string } };
+    lines: LineItem[];
+    menuItems: MenuItem[];
+    categories: MenuCategory[];
 }
 
 export function SessionDetail({ session: initialSession, lines: initialLines, menuItems, categories }: SessionDetailProps) {
@@ -20,8 +21,8 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
     const [loading, setLoading] = useState(false);
     const [servingIds, setServingIds] = useState<Set<string>>(new Set());
     const [cart, setCart] = useState<{ menu_item_id: string; qty: number; unit_price: number; name: string }[]>([]);
-    const [session, setSession] = useState(initialSession);
-    const [lines, setLines] = useState(initialLines);
+    const [session, setSession] = useState<SessionDetailProps['session']>(initialSession);
+    const [lines, setLines] = useState<LineItem[]>(initialLines);
 
     const [activeCat, setActiveCat] = useState(categories[0]?.id || null);
 
@@ -38,22 +39,22 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'line_items', filter: `session_id=eq.${initialSession.id}` },
                 (payload) => {
-                    const menuItem = menuItems.find((m: any) => m.id === payload.new.menu_item_id);
-                    setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } }]);
+                    const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
+                    setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } } as LineItem]);
                 }
             )
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${initialSession.id}` },
                 (payload) => {
-                    setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } : l));
+                    setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l));
                 }
             )
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${initialSession.id}` },
                 (payload) => {
-                    setSession((prev: any) => ({ ...prev, ...payload.new }));
+                    setSession(prev => ({ ...prev, ...payload.new } as SessionDetailProps['session']));
                 }
             )
             .subscribe();
@@ -62,7 +63,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
     }, [initialSession.id]);
 
 
-    const handleAddToCart = (item: any) => {
+    const handleAddToCart = (item: MenuItem) => {
         setCart(prev => {
             const existing = prev.find(i => i.menu_item_id === item.id);
             if (existing) {
@@ -88,8 +89,8 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
             await addLineItems(session.id, cart);
             setCart([]);
             // Auto reload handled by revalidatePath in action
-        } catch (e: any) {
-            alert('Error al marchar el pedido: ' + e.message);
+        } catch (e) {
+            alert('Error al marchar el pedido: ' + (e instanceof Error ? e.message : 'Error'));
         } finally {
             setLoading(false);
         }
@@ -102,8 +103,8 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
             await closeSession(session.id);
             // Will re-render with status = 'closing'
             setLoading(false);
-        } catch (e: any) {
-            alert('Error al pedir cuenta: ' + e.message);
+        } catch (e) {
+            alert('Error al pedir cuenta: ' + (e instanceof Error ? e.message : 'Error'));
             setLoading(false);
         }
     };
@@ -129,8 +130,8 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
 
             await paySession(session.id, voucherUrl);
             router.push('/bar');
-        } catch (e: any) {
-            alert('Error al cobrar: ' + e.message);
+        } catch (e) {
+            alert('Error al cobrar: ' + (e instanceof Error ? e.message : 'Error'));
             setLoading(false);
         }
     };
@@ -141,10 +142,10 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
         setLines(prev => prev.map(l => ids.includes(l.id) ? { ...l, state: 'served' } : l));
         try {
             await markItemsServed(ids);
-        } catch (e: any) {
+        } catch (e) {
             // Revert on error
             setLines(prev => prev.map(l => ids.includes(l.id) ? { ...l, state: 'pending' } : l));
-            alert('Error al marcar como servido: ' + e.message);
+            alert('Error al marcar como servido: ' + (e instanceof Error ? e.message : 'Error'));
         } finally {
             setServingIds(prev => {
                 const next = new Set(prev);
@@ -154,8 +155,8 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
         }
     }, []);
 
-    const pendingMobileLines = lines.filter((l: any) => l.source === 'mobile' && l.state === 'pending');
-    const servedLines = lines.filter((l: any) => l.state === 'served');
+    const pendingMobileLines = lines.filter(l => l.source === 'mobile' && l.state === 'pending');
+    const servedLines = lines.filter(l => l.state === 'served');
     const totalCart = cart.reduce((acc, c) => acc + (c.qty * c.unit_price), 0);
     const hasUnsentItems = cart.length > 0;
 
@@ -250,7 +251,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                                 Pedidos móviles en cola ({pendingMobileLines.length})
                             </h4>
                             <div className="space-y-2 mb-3">
-                                {pendingMobileLines.map((line: any) => {
+                                {pendingMobileLines.map((line) => {
                                     const isServing = servingIds.has(line.id);
                                     return (
                                         <div key={line.id} className="flex items-center justify-between gap-2 text-sm">
@@ -270,8 +271,8 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                             </div>
                             {pendingMobileLines.length > 1 && (
                                 <button
-                                    onClick={() => handleMarkMobileServed(pendingMobileLines.map((l: any) => l.id))}
-                                    disabled={pendingMobileLines.every((l: any) => servingIds.has(l.id))}
+                                    onClick={() => handleMarkMobileServed(pendingMobileLines.map(l => l.id))}
+                                    disabled={pendingMobileLines.every(l => servingIds.has(l.id))}
                                     className="w-full py-2 rounded-lg bg-[var(--color-success)] hover:bg-[var(--color-success)]/80 text-white font-bold text-xs transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
                                 >
                                     <Bell className="w-3.5 h-3.5" />
@@ -293,7 +294,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                             <p className="text-sm text-[var(--color-muted-foreground)] italic">Mesa vacía. Añade productos.</p>
                         )}
                         <div className="space-y-2">
-                            {servedLines.map((line: any) => (
+                            {servedLines.map((line) => (
                                 <div key={line.id} className="flex justify-between items-center text-sm py-1 border-b border-white/5">
                                     <span className="text-[var(--color-muted-foreground)] w-6">{line.qty}x</span>
                                     <span className="flex-1 truncate px-2">{line.menu_items?.name}</span>

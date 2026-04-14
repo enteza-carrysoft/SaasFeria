@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { getSessionLines } from '@/features/sessions/actions';
 import { SessionDetail } from '@/features/sessions/components/SessionDetail';
 import { redirect } from 'next/navigation';
+import type { MenuItem, MenuCategory } from '@/shared/types/domain';
 
 export const metadata = {
     title: 'Detalle de Cuenta | CasetaApp',
@@ -52,8 +53,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         <SessionDetail
             session={session}
             lines={lines}
-            menuItems={menuData as any || []}
-            categories={categoriesData as any || []}
+            menuItems={(menuData ?? []) as MenuItem[]}
+            categories={(categoriesData ?? []) as MenuCategory[]}
         />
     );
 }

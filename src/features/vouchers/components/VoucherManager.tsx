@@ -3,20 +3,23 @@
 import { useState } from 'react';
 import { toggleReconciliation } from '../actions';
 import { Receipt, CheckCircle, Circle, Eye } from 'lucide-react';
+import type { Session, Socio } from '@/shared/types/domain';
+
+type VoucherSession = Session & { socios: Pick<Socio, 'socio_number' | 'display_name'> | null };
 
 interface VoucherManagerProps {
-    sessions: any[];
+    sessions: VoucherSession[];
 }
 
 export function VoucherManager({ sessions }: VoucherManagerProps) {
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
-    const handleToggle = async (session: any) => {
+    const handleToggle = async (session: VoucherSession) => {
         setLoadingId(session.id);
         try {
-            await toggleReconciliation(session.id, session.is_reconciled);
-        } catch (e: any) {
-            alert('Error al conciliar: ' + e.message);
+            await toggleReconciliation(session.id, session.is_reconciled ?? false);
+        } catch (e) {
+            alert('Error al conciliar: ' + (e instanceof Error ? e.message : 'Error'));
         } finally {
             setLoadingId(null);
         }

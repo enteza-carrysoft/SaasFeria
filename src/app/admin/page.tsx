@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
+import type { StaffUser } from '@/shared/types/domain';
 
 export default async function AdminDashboardPage() {
     const supabase = await createServerSupabaseClient();
@@ -13,7 +14,7 @@ export default async function AdminDashboardPage() {
         .eq('is_active', true)
         .single();
 
-    const boothId = (staffData as any).booth_id;
+    const boothId = (staffData as StaffUser).booth_id;
 
     // Fetch quick stats
     const { count: activeSessionsCount } = await supabase

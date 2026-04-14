@@ -5,18 +5,21 @@ import { OpenSessionModal } from './OpenSessionModal';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/shared/lib/supabase';
+import type { Session, Socio, MenuItem } from '@/shared/types/domain';
+
+type SessionWithSocio = Session & { socios: Pick<Socio, 'socio_number' | 'display_name'> | null };
 
 interface BarTerminalProps {
     boothId: string;
-    initialSessions: any[];
-    menuItems: any[];
+    initialSessions: SessionWithSocio[];
+    menuItems: MenuItem[];
     mobilePendingCounts: Record<string, number>;
 }
 
 export function BarTerminal({ boothId, initialSessions, menuItems, mobilePendingCounts: initialCounts }: BarTerminalProps) {
     const router = useRouter();
     const [isSessionModalOpen, setSessionModalOpen] = useState(false);
-    const [sessions, setSessions] = useState(initialSessions);
+    const [sessions, setSessions] = useState<SessionWithSocio[]>(initialSessions);
     const [mobilePendingCounts, setMobilePendingCounts] = useState<Record<string, number>>(initialCounts);
     const [searchQuery, setSearchQuery] = useState('');
 
