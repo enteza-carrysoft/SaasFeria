@@ -31,7 +31,14 @@ export async function getSocioSessionLines(sessionId: string) {
         .order('created_at', { ascending: true });
 
     if (error) throw new Error(error.message);
-    return lines;
+
+    // Normalize: Supabase types the join as array but it's always a single object (FK)
+    return (lines ?? []).map(l => ({
+        ...l,
+        menu_items: Array.isArray(l.menu_items)
+            ? (l.menu_items[0] ?? null)
+            : l.menu_items,
+    }));
 }
 
 // Get menu items available for mobile ordering

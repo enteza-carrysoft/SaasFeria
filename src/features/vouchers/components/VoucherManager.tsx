@@ -63,14 +63,14 @@ export function VoucherManager({ sessions }: VoucherManagerProps) {
                                     </div>
                                 </td>
                                 <td className="p-4 text-sm whitespace-nowrap">
-                                    {new Date(session.closed_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                    {session.closed_at ? new Date(session.closed_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                                 </td>
                                 <td className="p-4 font-black">
                                     {Number(session.total_amount).toFixed(2)}€
                                 </td>
                                 <td className="p-4">
                                     <a
-                                        href={session.voucher_url}
+                                        href={session.voucher_url ?? '#'}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--color-card)] border border-[var(--color-border)] rounded hover:bg-[var(--color-info)] hover:text-white transition-colors text-xs font-bold"

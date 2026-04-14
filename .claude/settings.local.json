@@ -15,7 +15,10 @@
       "Bash(nslookup:*)",
       "mcp__playwright__browser_console_messages",
       "mcp__playwright__browser_handle_dialog",
-      "mcp__supabase__execute_sql"
+      "mcp__supabase__execute_sql",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(vercel:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

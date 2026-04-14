@@ -235,7 +235,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                                         <div className="flex items-center gap-3">
                                             <button onClick={() => handleRemoveFromCart(c.menu_item_id)} className="w-6 h-6 rounded bg-[var(--color-card)] text-white hover:bg-[var(--color-danger)] transition-colors">-</button>
                                             <span className="font-bold min-w-[20px] text-center">{c.qty}</span>
-                                            <button onClick={() => handleAddToCart(menuItems.find(m => m.id === c.menu_item_id))} className="w-6 h-6 rounded bg-[var(--color-card)] text-white hover:bg-[var(--color-primary)] transition-colors">+</button>
+                                            <button onClick={() => { const item = menuItems.find(m => m.id === c.menu_item_id); if (item) handleAddToCart(item); }} className="w-6 h-6 rounded bg-[var(--color-card)] text-white hover:bg-[var(--color-primary)] transition-colors">+</button>
                                         </div>
                                     </div>
                                 ))}

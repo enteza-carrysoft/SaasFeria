@@ -20,8 +20,9 @@ export interface Session {
     closed_at: string | null;
     opened_by: string | null;
     closed_by: string | null;
+    version: number;
     voucher_url: string | null;
-    is_reconciled?: boolean;
+    is_reconciled: boolean;
 }
 
 export interface LineItem {
@@ -32,9 +33,10 @@ export interface LineItem {
     unit_price: number;
     state: 'pending' | 'served';
     source: 'bar' | 'mobile';
-    created_at: string;
     created_by?: string | null;
-    menu_items: { name: string } | null;
+    idempotency_key?: string | null;
+    created_at: string;
+    menu_items?: { name: string } | null;
 }
 
 export interface MenuCategory {
@@ -42,6 +44,7 @@ export interface MenuCategory {
     booth_id: string;
     name: string;
     sort_order: number;
+    created_at: string;
 }
 
 export interface MenuItem {
@@ -52,15 +55,18 @@ export interface MenuItem {
     price: number;
     prep_type: 'bar' | 'kitchen';
     is_active: boolean;
+    is_top8: boolean;
     sort_order: number;
+    created_at: string;
 }
 
 export interface StaffUser {
     id: string;
-    user_id: string;
+    user_id: string | null;
     booth_id: string;
     staff_role: 'owner' | 'waiter' | 'kitchen';
     display_name: string;
+    pin_hash: string | null;
     is_active: boolean;
     created_at: string;
 }

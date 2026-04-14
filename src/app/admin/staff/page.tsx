@@ -3,6 +3,8 @@ import { getStaffAndSocios } from '@/features/staff/actions';
 import { StaffManager } from '@/features/staff/components/StaffManager';
 import type { StaffUser } from '@/shared/types/domain';
 
+type StaffResult = Awaited<ReturnType<typeof getStaffAndSocios>>;
+
 export const metadata = {
     title: 'Personal y Socios | CasetaApp',
 };
@@ -20,8 +22,8 @@ export default async function AdminStaffPage() {
 
     const boothId = (staffData as StaffUser).booth_id;
 
-    let staff: StaffUser[] = [];
-    let socios: unknown[] = [];
+    let staff: StaffResult['staff'] = [];
+    let socios: StaffResult['socios'] = [];
     try {
         const result = await getStaffAndSocios(boothId);
         staff = result.staff;
