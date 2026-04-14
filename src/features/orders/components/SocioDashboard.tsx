@@ -156,12 +156,18 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
                 (payload) => {
-                    setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l));
-                    // Alert when item goes from pending → served
-                    if (payload.old?.state === 'pending' && payload.new?.state === 'served') {
-                        const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
-                        triggerAlert(`✅ Listo: ${menuItem?.name ?? 'Tu pedido'} está servido`, 'order_served');
-                    }
+                    // payload.old is empty without REPLICA IDENTITY FULL — compare with local state instead
+                    setLines(prev => {
+                        const existing = prev.find(l => l.id === payload.new.id);
+                        if (existing?.state === 'pending' && payload.new?.state === 'served') {
+                            const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
+                            // setTimeout to fire alert outside the state setter
+                            setTimeout(() => {
+                                triggerAlert(`✅ Listo: ${menuItem?.name ?? 'Tu pedido'} está servido`, 'order_served');
+                            }, 0);
+                        }
+                        return prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l);
+                    });
                 }
             )
             .subscribe();
