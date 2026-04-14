@@ -95,6 +95,23 @@ export async function openSession(boothId: string, socioNumber: number) {
     return newSession.id;
 }
 
+// Recalculate and persist total_amount for a session (sum of all served line_items)
+// This fires a Realtime UPDATE on the sessions table → socio app updates instantly
+async function syncSessionTotal(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, sessionId: string) {
+    const { data: lines } = await supabase
+        .from('line_items')
+        .select('qty, unit_price')
+        .eq('session_id', sessionId)
+        .eq('state', 'served');
+
+    const total = (lines ?? []).reduce((sum, l) => sum + l.qty * l.unit_price, 0);
+
+    await supabase
+        .from('sessions')
+        .update({ total_amount: total })
+        .eq('id', sessionId);
+}
+
 // Add line items to a session (Waiters adding drinks/tapas)
 export async function addLineItems(sessionId: string, items: { menu_item_id: string; qty: number; unit_price: number }[]) {
     if (items.length === 0) return;
@@ -107,7 +124,7 @@ export async function addLineItems(sessionId: string, items: { menu_item_id: str
         menu_item_id: item.menu_item_id,
         qty: item.qty,
         unit_price: item.unit_price,
-        state: 'served' as const, // For bar orders, they are served immediately usually
+        state: 'served' as const,
         source: 'bar' as const,
         created_by: user?.id
     }));
@@ -115,7 +132,8 @@ export async function addLineItems(sessionId: string, items: { menu_item_id: str
     const { error } = await supabase.from('line_items').insert(insertPayload);
     if (error) throw new Error(error.message);
 
-    // Note: The total_amount is automatically updated by the trg_update_session_total trigger in Supabase!
+    // Update total in DB → triggers Realtime UPDATE on sessions → socio sees new total
+    await syncSessionTotal(supabase, sessionId);
     revalidatePath('/bar');
 }
 

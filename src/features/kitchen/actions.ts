@@ -66,6 +66,22 @@ export async function getKitchenOrders(boothId: string): Promise<KitchenOrderIte
     });
 }
 
+// Recalculate and persist total_amount → triggers Realtime UPDATE on sessions
+async function syncSessionTotal(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, sessionId: string) {
+    const { data: lines } = await supabase
+        .from('line_items')
+        .select('qty, unit_price')
+        .eq('session_id', sessionId)
+        .eq('state', 'served');
+
+    const total = (lines ?? []).reduce((sum, l) => sum + l.qty * l.unit_price, 0);
+
+    await supabase
+        .from('sessions')
+        .update({ total_amount: total })
+        .eq('id', sessionId);
+}
+
 export async function markItemsServed(lineItemIds: string[]): Promise<void> {
     if (lineItemIds.length === 0) return;
     const supabase = await createServerSupabaseClient();
@@ -85,6 +101,9 @@ export async function markItemsServed(lineItemIds: string[]): Promise<void> {
         .in('id', lineItemIds);
 
     if (error) throw new Error(error.message);
+
+    // Update total for each affected session → Realtime fires → socio sees new total
+    await Promise.all(sessionIds.map(id => syncSessionTotal(supabase, id)));
 
     // For each affected session, check if all pending items are now done
     for (const sessionId of sessionIds) {

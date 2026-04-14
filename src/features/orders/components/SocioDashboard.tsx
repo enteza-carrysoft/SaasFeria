@@ -379,19 +379,6 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                             <Volume2 className="w-3.5 h-3.5" />
                                             Probar alerta
                                         </button>
-                                        <button
-                                            onClick={() => {
-                                                if (!('vibrate' in navigator)) {
-                                                    setInAppAlert({ message: '❌ navigator.vibrate no existe en este dispositivo (iOS)', id: Date.now() });
-                                                    return;
-                                                }
-                                                const ok = navigator.vibrate([300, 100, 300, 100, 500]);
-                                                setInAppAlert({ message: ok ? '✅ vibrate() = true — el motor debería haber vibrado' : '❌ vibrate() = false — el sistema lo bloqueó (modo silencio?)', id: Date.now() });
-                                            }}
-                                            className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors border border-[var(--color-border)] rounded px-2 py-1"
-                                        >
-                                            📳 Probar vibración
-                                        </button>
                                     </div>
                                 </div>
 
