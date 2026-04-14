@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import { InstallPWA } from '@/shared/components/InstallPWA';
+import { NotificationToggle } from '@/shared/components/NotificationToggle';
 import type { Socio } from '@/shared/types/domain';
 
 export const dynamic = 'force-dynamic';
@@ -46,8 +47,9 @@ export default async function SocioLayout({
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     <InstallPWA />
+                    <NotificationToggle />
                     <ThemeToggle />
                     <form action="/auth/signout" method="POST">
                         <button type="submit" className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors">
