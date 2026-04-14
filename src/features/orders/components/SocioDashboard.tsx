@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { placeMobileOrder, getSocioSessionLines } from '../actions';
-import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown, Volume2, Image, X } from 'lucide-react';
+import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
 import { useAlertSound, type AlertType } from '@/shared/hooks/useAlertSound';
 import type { Socio, Session, LineItem, MenuCategory, MenuItem } from '@/shared/types/domain';
@@ -19,13 +18,6 @@ interface SocioDashboardProps {
 
 type Tab = 'cuenta' | 'pedir' | 'historial';
 
-// Helper: convert VAPID public key from base64url to Uint8Array
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = atob(base64);
-    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
-}
 
 export function SocioDashboard({ socio, session: initialSession, lines: initialLines, categories, menuItems, history }: SocioDashboardProps) {
     const [activeTab, setActiveTab] = useState<Tab>(initialSession ? 'cuenta' : 'pedir');
@@ -34,7 +26,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [orderSuccess, setOrderSuccess] = useState(false);
     const [session, setSession] = useState<Session | null>(initialSession);
     const [lines, setLines] = useState<LineItem[]>(initialLines);
-    const [notifStatus, setNotifStatus] = useState<'unsupported' | 'denied' | 'default' | 'granted'>('unsupported');
+    const [notifStatus, setNotifStatus] = useState<'default' | 'granted'>('default');
     const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
     const [inAppAlert, setInAppAlert] = useState<{ message: string; id: number } | null>(null);
     const [pendingCallAlert, setPendingCallAlert] = useState(false); // parpadeo importe hasta que el socio lo toca
@@ -42,11 +34,10 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [sessionLinesCache, setSessionLinesCache] = useState<Record<string, LineItem[]>>({});
     const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-    const router = useRouter();
     const { alert: playAlert } = useAlertSound();
-    // Ref to track the previous session value for Realtime comparisons
-    // (payload.old is empty without REPLICA IDENTITY FULL)
-    const prevSessionRef = useRef<Session | null>(initialSession);
+    // Refs — stable references that don't cause Realtime channel recreation
+    const prevSessionRef = useRef<Session | null>(initialSession);   // previous session for total comparison
+    const menuItemsRef = useRef<MenuItem[]>(menuItems);               // latest menu items for INSERT handler
 
     const toggleCategory = (catId: string) => {
         setOpenCategories(prev => {
@@ -63,52 +54,13 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         prevSessionRef.current = initialSession;
     }, [initialSession]);
     useEffect(() => { setLines(initialLines); }, [initialLines]);
+    useEffect(() => { menuItemsRef.current = menuItems; }, [menuItems]);
 
-    // Check notification permission status
+    // Track notification permission for the test button (send push only if granted)
     useEffect(() => {
-        if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-            setNotifStatus('unsupported');
-            return;
+        if ('Notification' in window) {
+            setNotifStatus(Notification.permission === 'granted' ? 'granted' : 'default');
         }
-        setNotifStatus(Notification.permission as 'denied' | 'default' | 'granted');
-    }, []);
-
-    const handleEnableNotifications = useCallback(async () => {
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-        const permission = await Notification.requestPermission();
-        setNotifStatus(permission as 'denied' | 'default' | 'granted');
-        if (permission !== 'granted') return;
-
-        const reg = await navigator.serviceWorker.ready;
-        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-        if (!vapidKey) return;
-
-        const sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey) as unknown as BufferSource,
-        });
-
-        const { endpoint, keys } = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
-        await fetch('/api/push/subscribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint, p256dh: keys.p256dh, auth: keys.auth }),
-        });
-    }, []);
-
-    const handleDisableNotifications = useCallback(async () => {
-        if (!('serviceWorker' in navigator)) return;
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (!sub) return;
-        const { endpoint } = sub;
-        await sub.unsubscribe();
-        await fetch('/api/push/subscribe', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint }),
-        });
-        setNotifStatus('default');
     }, []);
 
     // Show in-app alert banner with sound + vibration
@@ -154,8 +106,6 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                         }
                         if (updated.status === 'closing' && prev?.status !== 'closing') {
                             triggerAlert('💳 Tu cuenta está lista para pagar', 'account_closing');
-                            // Force re-fetch server props so initialSession also reflects the new status
-                            router.refresh();
                         }
                     }
                 }
@@ -163,7 +113,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [socio.id, triggerAlert, router]);
+    }, [socio.id, triggerAlert]);
 
     // Realtime: watch line_items for the active session (served/pending state changes)
     useEffect(() => {
@@ -175,7 +125,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
                 (payload) => {
-                    const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
+                    const menuItem = menuItemsRef.current.find(m => m.id === payload.new.menu_item_id);
                     setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } } as LineItem]);
                 }
             )
@@ -190,7 +140,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [session?.id, menuItems]);
+    }, [session?.id]);
 
 
     // Cart helpers
@@ -233,12 +183,6 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     // Group lines by state
     const pendingLines = lines.filter(l => l.state === 'pending');
     const servedLines = lines.filter(l => l.state === 'served');
-
-    // Group menu by category
-    const getCategoryName = (catId: string) => {
-        const cat = categories.find(c => c.id === catId);
-        return cat?.name || 'Otros';
-    };
 
     const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
         { id: 'cuenta', label: 'Mi Cuenta', icon: <Receipt className="w-4 h-4" /> },
@@ -360,27 +304,8 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                         </span>
                                     </div>
 
-                                    {/* Notification controls */}
-                                    <div className="mt-4 pt-3 border-t border-[var(--color-border)] flex items-center justify-center gap-3 flex-wrap">
-                                        {notifStatus !== 'unsupported' && notifStatus !== 'denied' && (
-                                            notifStatus === 'granted' ? (
-                                                <button
-                                                    onClick={handleDisableNotifications}
-                                                    className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-                                                >
-                                                    <BellOff className="w-3.5 h-3.5" />
-                                                    Desactivar push
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    onClick={handleEnableNotifications}
-                                                    className="flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:text-[var(--color-accent)]/80 font-bold transition-colors"
-                                                >
-                                                    <Bell className="w-3.5 h-3.5" />
-                                                    Activar push
-                                                </button>
-                                            )
-                                        )}
+                                    {/* Test in-app alert */}
+                                    <div className="mt-4 pt-3 border-t border-[var(--color-border)] flex items-center justify-center">
                                         <button
                                             onClick={handleTestAlert}
                                             className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors border border-[var(--color-border)] rounded px-2 py-1"
