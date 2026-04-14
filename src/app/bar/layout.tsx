@@ -2,6 +2,9 @@ import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import type { StaffUser } from '@/shared/types/domain';
+
+export const dynamic = 'force-dynamic';
+
 export default async function BarLayout({
     children,
 }: {

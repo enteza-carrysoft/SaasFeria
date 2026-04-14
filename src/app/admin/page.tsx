@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import type { StaffUser } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminDashboardPage() {
     const supabase = await createServerSupabaseClient();
 

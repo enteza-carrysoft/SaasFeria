@@ -2,6 +2,8 @@ import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Cocina | CasetaApp',
 };

@@ -3,6 +3,8 @@ import { getVoucherSessions } from '@/features/vouchers/actions';
 import { VoucherManager } from '@/features/vouchers/components/VoucherManager';
 import { redirect } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Conciliación | CasetaApp',
 };

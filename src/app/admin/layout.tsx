@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import type { StaffUser } from '@/shared/types/domain';

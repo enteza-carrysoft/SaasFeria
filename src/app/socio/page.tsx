@@ -3,6 +3,8 @@ import { getSocioSession, getSocioSessionLines, getSocioMenu, getSocioHistory } 
 import { SocioDashboard } from '@/features/orders/components/SocioDashboard';
 import type { Socio, LineItem } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Mi Caseta | CasetaApp',
 };

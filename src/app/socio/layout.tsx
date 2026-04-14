@@ -4,6 +4,8 @@ import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import { InstallPWA } from '@/shared/components/InstallPWA';
 import type { Socio } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export default async function SocioLayout({
     children,
 }: {

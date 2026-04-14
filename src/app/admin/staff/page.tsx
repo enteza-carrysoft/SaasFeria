@@ -3,6 +3,8 @@ import { getStaffAndSocios } from '@/features/staff/actions';
 import { StaffManager } from '@/features/staff/components/StaffManager';
 import type { StaffUser } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 type StaffResult = Awaited<ReturnType<typeof getStaffAndSocios>>;
 
 export const metadata = {

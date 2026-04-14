@@ -2,6 +2,8 @@ import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import type { StaffUser, Socio } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AppPage() {
     let supabase;
     try {

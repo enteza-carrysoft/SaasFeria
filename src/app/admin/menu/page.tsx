@@ -3,6 +3,8 @@ import { getCatalog } from '@/features/catalog/actions';
 import { CatalogManager } from '@/features/catalog/components/CatalogManager';
 import type { StaffUser } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Catálogo Admin | CasetaApp',
 };

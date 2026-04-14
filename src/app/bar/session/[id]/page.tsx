@@ -4,6 +4,8 @@ import { SessionDetail } from '@/features/sessions/components/SessionDetail';
 import { redirect } from 'next/navigation';
 import type { MenuItem, MenuCategory } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Detalle de Cuenta | CasetaApp',
 };

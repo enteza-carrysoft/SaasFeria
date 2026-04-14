@@ -3,11 +3,11 @@ import { getActiveSessions } from '@/features/sessions/actions';
 import { BarTerminal } from '@/features/sessions/components/BarTerminal';
 import type { MenuItem } from '@/shared/types/domain';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Terminal Barra | CasetaApp',
 };
-
-export const dynamic = 'force-dynamic';
 
 export default async function BarPage() {
     const supabase = await createServerSupabaseClient();
