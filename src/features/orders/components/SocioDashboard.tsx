@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { placeMobileOrder } from '../actions';
-import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown, Volume2 } from 'lucide-react';
+import { placeMobileOrder, getSocioSessionLines } from '../actions';
+import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown, Volume2, Image, X } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
 import { useAlertSound, type AlertType } from '@/shared/hooks/useAlertSound';
 import type { Socio, Session, LineItem, MenuCategory, MenuItem } from '@/shared/types/domain';
@@ -36,6 +36,11 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [notifStatus, setNotifStatus] = useState<'unsupported' | 'denied' | 'default' | 'granted'>('unsupported');
     const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
     const [inAppAlert, setInAppAlert] = useState<{ message: string; id: number } | null>(null);
+    const [pendingCallAlert, setPendingCallAlert] = useState(false); // parpadeo importe hasta que el socio lo toca
+    const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+    const [sessionLinesCache, setSessionLinesCache] = useState<Record<string, LineItem[]>>({});
+    const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+    const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const { alert: playAlert } = useAlertSound();
 
     const toggleCategory = (catId: string) => {
@@ -102,6 +107,9 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const triggerAlert = useCallback((message: string, type: AlertType = 'generic') => {
         playAlert({ type });
         setInAppAlert({ message, id: Date.now() });
+        if (type === 'order_served') {
+            setPendingCallAlert(true);
+        }
     }, [playAlert]);
 
     // Auto-dismiss in-app alert after 4s
@@ -229,6 +237,22 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         { id: 'historial', label: 'Historial', icon: <Clock className="w-4 h-4" /> },
     ];
 
+    const handleToggleHistorySession = useCallback(async (sessionId: string) => {
+        if (expandedSessionId === sessionId) {
+            setExpandedSessionId(null);
+            return;
+        }
+        setExpandedSessionId(sessionId);
+        if (sessionLinesCache[sessionId]) return; // ya cargado
+        setLoadingSessionId(sessionId);
+        try {
+            const lines = await getSocioSessionLines(sessionId);
+            setSessionLinesCache(prev => ({ ...prev, [sessionId]: lines as LineItem[] }));
+        } finally {
+            setLoadingSessionId(null);
+        }
+    }, [expandedSessionId, sessionLinesCache]);
+
     const handleTestAlert = useCallback(async () => {
         const vibrateSupported = 'vibrate' in navigator;
         const msg = vibrateSupported
@@ -305,7 +329,22 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                 {/* Total Card */}
                                 <div className="glass-card p-6 text-center">
                                     <p className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider mb-1">Total Actual</p>
-                                    <p className="text-5xl font-black text-[var(--color-foreground)]">{Number(session.total_amount).toFixed(2)}€</p>
+
+                                    {/* Importe — parpadea rojo cuando hay pedido listo sin confirmar */}
+                                    <button
+                                        onClick={() => setPendingCallAlert(false)}
+                                        className={`text-5xl font-black w-full text-center transition-colors ${pendingCallAlert ? 'animate-call-blink cursor-pointer' : 'text-[var(--color-foreground)] cursor-default'}`}
+                                        aria-label={pendingCallAlert ? 'Pedido listo — toca para confirmar' : undefined}
+                                    >
+                                        {Number(session.total_amount).toFixed(2)}€
+                                    </button>
+
+                                    {pendingCallAlert && (
+                                        <p className="text-xs text-[var(--color-danger)] font-bold mt-1 animate-pulse">
+                                            ¡Tu pedido está listo! Toca el importe para confirmar
+                                        </p>
+                                    )}
+
                                     <div className="flex items-center justify-center gap-2 mt-3">
                                         <span className={`badge ${session.status === 'open' ? 'badge-open' : 'badge-closing'}`}>
                                             {session.status === 'open' ? 'Cuenta Abierta' : 'Pendiente de Cobro'}
@@ -504,35 +543,99 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                         {history.length === 0 ? (
                             <p className="text-sm text-[var(--color-muted-foreground)] italic">No hay historial de cuenta aún.</p>
                         ) : (
-                            history.map((s) => (
-                                <div key={s.id} className="glass-card p-4 flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="text-xs text-[var(--color-muted-foreground)]">
-                                                {new Date(s.closed_at || s.opened_at).toLocaleString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                            </p>
-                                            <span className={`badge text-[10px] mt-1 ${s.status === 'closed' ? 'badge-closed' : 'badge-voided'}`}>
-                                                {s.status === 'closed' ? 'Pagada' : 'Anulada'}
-                                            </span>
-                                        </div>
-                                        <p className="text-2xl font-black">{Number(s.total_amount).toFixed(2)}€</p>
-                                    </div>
+                            history.map((s) => {
+                                const isExpanded = expandedSessionId === s.id;
+                                const isLoading = loadingSessionId === s.id;
+                                const cachedLines = sessionLinesCache[s.id];
 
-                                    {s.voucher_url && (
-                                        <div className="pt-3 border-t border-[var(--color-border)]">
-                                            <a
-                                                href={s.voucher_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-xs font-bold text-[var(--color-info)] flex items-center gap-1 hover:underline"
-                                            >
-                                                <Receipt className="w-4 h-4" /> Ver Justificante de Pago
-                                            </a>
-                                        </div>
-                                    )}
-                                </div>
-                            ))
+                                return (
+                                    <div key={s.id} className="glass-card overflow-hidden">
+                                        {/* Cabecera — toca para expandir */}
+                                        <button
+                                            onClick={() => handleToggleHistorySession(s.id)}
+                                            className="w-full p-4 flex justify-between items-center active:bg-[var(--color-muted)] transition-colors"
+                                        >
+                                            <div className="text-left">
+                                                <p className="text-xs text-[var(--color-muted-foreground)]">
+                                                    {new Date(s.closed_at || s.opened_at).toLocaleString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                                <span className={`badge text-[10px] mt-1 ${s.status === 'closed' ? 'badge-closed' : 'badge-voided'}`}>
+                                                    {s.status === 'closed' ? 'Pagada' : 'Anulada'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-2xl font-black">{Number(s.total_amount).toFixed(2)}€</p>
+                                                <ChevronDown className={`w-4 h-4 text-[var(--color-muted-foreground)] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                            </div>
+                                        </button>
+
+                                        {/* Detalle expandido */}
+                                        {isExpanded && (
+                                            <div className="border-t border-[var(--color-border)] p-4 space-y-4 animate-fade-in">
+                                                {/* Lista de consumiciones */}
+                                                {isLoading ? (
+                                                    <p className="text-sm text-[var(--color-muted-foreground)] text-center py-2">Cargando...</p>
+                                                ) : cachedLines && cachedLines.length > 0 ? (
+                                                    <div>
+                                                        <p className="text-xs font-bold text-[var(--color-muted-foreground)] uppercase tracking-wider mb-2">Consumiciones</p>
+                                                        <div className="space-y-1.5">
+                                                            {cachedLines.map(line => (
+                                                                <div key={line.id} className="flex items-center text-sm">
+                                                                    <span className="text-[var(--color-muted-foreground)] w-6 shrink-0">{line.qty}x</span>
+                                                                    <span className="flex-1 truncate px-2">{line.menu_items?.name ?? '—'}</span>
+                                                                    <span className="font-mono font-bold shrink-0">{(line.qty * line.unit_price).toFixed(2)}€</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="flex justify-between items-center text-sm font-black pt-2 border-t border-[var(--color-border)] mt-2">
+                                                                <span>Total</span>
+                                                                <span className="font-mono">{Number(s.total_amount).toFixed(2)}€</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : cachedLines ? (
+                                                    <p className="text-sm text-[var(--color-muted-foreground)] italic">Sin consumiciones registradas.</p>
+                                                ) : null}
+
+                                                {/* Foto del ticket */}
+                                                {s.voucher_url && (
+                                                    <button
+                                                        onClick={() => setPhotoUrl(s.voucher_url)}
+                                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[var(--color-border)] text-sm font-bold hover:bg-[var(--color-muted)] active:bg-[var(--color-muted)] transition-colors"
+                                                    >
+                                                        <Image className="w-4 h-4" />
+                                                        Ver foto del ticket
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
                         )}
+                    </div>
+                )}
+
+                {/* ===== PHOTO MODAL ===== */}
+                {photoUrl && (
+                    <div
+                        className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4"
+                        onClick={() => setPhotoUrl(null)}
+                    >
+                        <button
+                            onClick={() => setPhotoUrl(null)}
+                            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white"
+                            aria-label="Cerrar"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                        <p className="text-white/60 text-xs mb-3">Toca para cerrar</p>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={photoUrl}
+                            alt="Foto del ticket"
+                            className="max-w-full max-h-[80dvh] object-contain rounded-lg shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        />
                     </div>
                 )}
             </div>

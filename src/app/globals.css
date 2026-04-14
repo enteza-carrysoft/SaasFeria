@@ -190,3 +190,12 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-muted-foreground);
 }
+/* Call-to-attention blink: alternates between danger red and foreground */
+@keyframes callBlink {
+  0%, 49% { color: var(--color-danger); }
+  50%, 100% { color: var(--color-foreground); }
+}
+
+.animate-call-blink {
+  animation: callBlink 0.8s step-end infinite;
+}
