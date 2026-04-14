@@ -9,10 +9,20 @@ export interface Socio {
     status: 'active' | 'inactive';
 }
 
+export interface SocioAutorizado {
+    id: string;
+    socio_id: string;
+    booth_id: string;
+    display_name: string;
+    is_active: boolean;
+    created_at: string;
+}
+
 export interface Session {
     id: string;
     booth_id: string;
     socio_id: string;
+    autorizado_id: string | null;
     status: 'open' | 'closing' | 'closed' | 'voided';
     total_amount: number;
     currency: string;

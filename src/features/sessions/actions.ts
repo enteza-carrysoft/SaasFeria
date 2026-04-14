@@ -4,17 +4,15 @@ import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import { sendPushToUser } from '@/shared/lib/push';
 
-// Fetch all Open or Closing sessions for this booth
+// Fetch all Open or Closing sessions for this booth (incluyendo autorizado si aplica)
 export async function getActiveSessions(boothId: string) {
     const supabase = await createServerSupabaseClient();
     const { data: sessions, error } = await supabase
         .from('sessions')
         .select(`
             *,
-            socios (
-                socio_number,
-                display_name
-            )
+            socios (socio_number, display_name),
+            socio_autorizados (display_name)
         `)
         .eq('booth_id', boothId)
         .in('status', ['open', 'closing'])
@@ -22,6 +20,33 @@ export async function getActiveSessions(boothId: string) {
 
     if (error) throw new Error(error.message);
     return sessions;
+}
+
+// Busca un socio por número y devuelve sus autorizados activos
+export async function getAutorizadosBySocioNumber(boothId: string, socioNumber: number) {
+    const supabase = await createServerSupabaseClient();
+
+    const { data: socio } = await supabase
+        .from('socios')
+        .select('id, display_name, status')
+        .eq('booth_id', boothId)
+        .eq('socio_number', socioNumber)
+        .maybeSingle();
+
+    if (!socio) return { error: 'Socio no encontrado en esta caseta.' };
+    if (socio.status !== 'active') return { error: 'Socio dado de baja.' };
+
+    const { data: autorizados } = await supabase
+        .from('socio_autorizados')
+        .select('id, display_name')
+        .eq('socio_id', socio.id)
+        .eq('is_active', true)
+        .order('display_name');
+
+    return {
+        socio: { id: socio.id, display_name: socio.display_name as string },
+        autorizados: (autorizados ?? []) as Array<{ id: string; display_name: string }>,
+    };
 }
 
 // Fetch line items for a specific session
@@ -47,11 +72,10 @@ export async function getSessionLines(sessionId: string) {
     }));
 }
 
-// Open a new session by Socio Number
-export async function openSession(boothId: string, socioNumber: number) {
+// Open a new session by Socio Number (con autorizado opcional)
+export async function openSession(boothId: string, socioNumber: number, autorizadoId?: string | null) {
     const supabase = await createServerSupabaseClient();
 
-    // First, find the socio ID
     const { data: socio, error: socioError } = await supabase
         .from('socios')
         .select('id, status')
@@ -62,25 +86,43 @@ export async function openSession(boothId: string, socioNumber: number) {
     if (socioError || !socio) throw new Error('Socio no encontrado en esta caseta.');
     if (socio.status !== 'active') throw new Error('Socio dado de baja.');
 
-    // Check if socio already has an open session
-    const { data: existing } = await supabase
+    // Validar autorizado si se especifica
+    if (autorizadoId) {
+        const { data: aut } = await supabase
+            .from('socio_autorizados')
+            .select('id')
+            .eq('id', autorizadoId)
+            .eq('socio_id', socio.id)
+            .eq('is_active', true)
+            .maybeSingle();
+        if (!aut) throw new Error('Autorizado no válido o inactivo.');
+    }
+
+    // Verificar sesión ya abierta para esta identidad concreta
+    let existingQuery = supabase
         .from('sessions')
         .select('id')
         .eq('socio_id', socio.id)
-        .eq('status', 'open')
-        .single();
+        .eq('status', 'open');
 
-    if (existing) throw new Error('El socio ya tiene una cuenta abierta.');
+    const existing = autorizadoId
+        ? await existingQuery.eq('autorizado_id', autorizadoId).maybeSingle()
+        : await existingQuery.is('autorizado_id', null).maybeSingle();
 
-    // Get current user ID (waiter)
+    if (existing.data) {
+        throw new Error(autorizadoId
+            ? 'Este autorizado ya tiene una cuenta abierta.'
+            : 'El socio ya tiene una cuenta abierta.');
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Insert new session
     const { data: newSession, error: insertError } = await supabase
         .from('sessions')
         .insert({
             booth_id: boothId,
             socio_id: socio.id,
+            autorizado_id: autorizadoId ?? null,
             status: 'open',
             opened_by: user?.id,
             total_amount: 0,

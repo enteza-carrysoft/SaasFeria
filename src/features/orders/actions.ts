@@ -3,19 +3,17 @@
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 
-// Get the socio's active session (if any)
-export async function getSocioSession(socioId: string) {
+// Get all active sessions for a socio (one per identity: titular + autorizados)
+export async function getActiveSocioSessions(socioId: string) {
     const supabase = await createServerSupabaseClient();
-    const { data: session } = await supabase
+    const { data: sessions } = await supabase
         .from('sessions')
         .select('*')
         .eq('socio_id', socioId)
         .in('status', ['open', 'closing'])
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .single();
+        .order('opened_at', { ascending: false });
 
-    return session;
+    return (sessions ?? []) as import('@/shared/types/domain').Session[];
 }
 
 // Get line items for a session
@@ -85,6 +83,28 @@ export async function placeMobileOrder(
 
     revalidatePath('/socio');
     revalidatePath('/bar');
+}
+
+// Update socio's own display name
+export async function updateSocioProfile(socioId: string, displayName: string) {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: socio } = await supabase
+        .from('socios')
+        .select('user_id')
+        .eq('id', socioId)
+        .single();
+
+    if (!socio || socio.user_id !== user?.id) throw new Error('No autorizado');
+
+    const { error } = await supabase
+        .from('socios')
+        .update({ display_name: displayName })
+        .eq('id', socioId);
+
+    if (error) throw new Error(error.message);
+    revalidatePath('/socio');
 }
 
 // Get closed sessions history for this socio

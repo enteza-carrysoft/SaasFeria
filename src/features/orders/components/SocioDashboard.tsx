@@ -3,34 +3,40 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { placeMobileOrder, getSocioSessionLines } from '../actions';
-import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X } from 'lucide-react';
+import { SocioPerfil } from './SocioPerfil';
+import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X, Settings } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
 import { useAlertSound, type AlertType } from '@/shared/hooks/useAlertSound';
+import { useIdentity } from '@/shared/components/IdentityGate';
 import type { Socio, Session, LineItem, MenuCategory, MenuItem } from '@/shared/types/domain';
 
 interface SocioDashboardProps {
     socio: Socio;
-    session: Session | null;
-    lines: LineItem[];
+    sessions: Session[];
     categories: MenuCategory[];
     menuItems: MenuItem[];
     history: Session[];
 }
 
-type Tab = 'cuenta' | 'pedir' | 'historial';
+type Tab = 'cuenta' | 'pedir' | 'historial' | 'perfil';
 
+export function SocioDashboard({ socio, sessions, categories, menuItems, history }: SocioDashboardProps) {
+    const { autorizadoId, autorizados } = useIdentity();
 
-export function SocioDashboard({ socio, session: initialSession, lines: initialLines, categories, menuItems, history }: SocioDashboardProps) {
-    const [activeTab, setActiveTab] = useState<Tab>(initialSession ? 'cuenta' : 'pedir');
+    // Sesión activa para esta identidad
+    const findMySession = (list: Session[]) =>
+        list.find(s => autorizadoId === null ? s.autorizado_id === null : s.autorizado_id === autorizadoId) ?? null;
+
+    const [activeTab, setActiveTab] = useState<Tab>(() => findMySession(sessions) ? 'cuenta' : 'pedir');
     const [cart, setCart] = useState<{ menu_item_id: string; qty: number; unit_price: number; name: string }[]>([]);
     const [loading, setLoading] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(false);
-    const [session, setSession] = useState<Session | null>(initialSession);
-    const [lines, setLines] = useState<LineItem[]>(initialLines);
+    const [session, setSession] = useState<Session | null>(() => findMySession(sessions));
+    const [lines, setLines] = useState<LineItem[]>([]);
     const [notifStatus, setNotifStatus] = useState<'default' | 'granted'>('default');
     const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
     const [inAppAlert, setInAppAlert] = useState<{ message: string; id: number } | null>(null);
-    const [pendingCallAlert, setPendingCallAlert] = useState(false); // parpadeo importe hasta que el socio lo toca
+    const [pendingCallAlert, setPendingCallAlert] = useState(false);
     const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
     const [sessionLinesCache, setSessionLinesCache] = useState<Record<string, LineItem[]>>({});
     const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
@@ -38,8 +44,9 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const router = useRouter();
     const { alert: playAlert } = useAlertSound();
     // Refs — never go in Realtime useEffect deps (stable, no channel recreation)
-    const prevSessionRef = useRef<Session | null>(initialSession);   // previous session for diff-based alerts
-    const menuItemsRef = useRef<MenuItem[]>(menuItems);               // latest menu items for line_items INSERT
+    const prevSessionRef = useRef<Session | null>(findMySession(sessions));
+    const autorizadoIdRef = useRef<string | null>(autorizadoId);
+    const menuItemsRef = useRef<MenuItem[]>(menuItems);
     const triggerAlertRef = useRef<((msg: string, type: AlertType) => void) | null>(null);
 
     const toggleCategory = (catId: string) => {
@@ -51,33 +58,41 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         });
     };
 
-    // Sync state from server re-renders (router.refresh() polling) + fire alerts on detected changes
-    useEffect(() => {
-        const prev = prevSessionRef.current;
-        prevSessionRef.current = initialSession;
-        setSession(initialSession);
+    // Mantener ref de autorizadoId actualizado para handlers de Realtime
+    useEffect(() => { autorizadoIdRef.current = autorizadoId; }, [autorizadoId]);
 
-        // First mount: prev and initialSession are the same object → no spurious alerts
-        if (prev === initialSession) return;
+    // Sync sesión desde re-renders del servidor (polling) + disparar alertas si cambia
+    useEffect(() => {
+        const matched = findMySession(sessions);
+        const prev = prevSessionRef.current;
+        prevSessionRef.current = matched;
+        setSession(matched);
+
+        if (prev?.id === matched?.id && prev?.status === matched?.status && prev?.total_amount === matched?.total_amount) return;
 
         const alert = triggerAlertRef.current;
         if (!alert) return;
 
-        if (prev === null && initialSession !== null) {
-            // New session opened while socio was in the app
+        if (prev === null && matched !== null) {
             setActiveTab('cuenta');
             alert('🍻 El camarero ha abierto tu cuenta', 'account_opened');
-        } else if (prev !== null && initialSession !== null) {
-            if (initialSession.total_amount > prev.total_amount) {
+        } else if (prev !== null && matched !== null) {
+            if (matched.total_amount > prev.total_amount) {
                 alert('✅ Pedido servido — importe actualizado', 'order_served');
             }
-            if (initialSession.status === 'closing' && prev.status !== 'closing') {
+            if (matched.status === 'closing' && prev.status !== 'closing') {
                 alert('💳 Tu cuenta está lista para pagar', 'account_closing');
             }
         }
-    }, [initialSession]); // triggerAlert via ref — stable, no deps needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessions, autorizadoId]);
 
-    useEffect(() => { setLines(initialLines); }, [initialLines]);
+    // Cargar líneas cuando cambia la sesión activa
+    useEffect(() => {
+        if (!session?.id) { setLines([]); return; }
+        getSocioSessionLines(session.id).then(l => setLines(l as LineItem[]));
+    }, [session?.id]);
+
     useEffect(() => { menuItemsRef.current = menuItems; }, [menuItems]);
 
     // Track notification permission for the test button (send push only if granted)
@@ -106,8 +121,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         return () => clearTimeout(t);
     }, [inAppAlert]);
 
-    // Realtime: watch sessions — bonus for instant updates when Supabase Realtime is configured
-    // All refs used inside (prevSessionRef, triggerAlertRef) → empty deps → channel created ONCE, never recreated
+    // Realtime: watch sessions filtradas por identidad
     useEffect(() => {
         const supabase = createClient();
         const channel = supabase
@@ -116,23 +130,28 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'sessions', filter: `socio_id=eq.${socio.id}` },
                 (payload) => {
+                    const myAutorizadoId = autorizadoIdRef.current;
+                    const data = payload.new as Session;
+                    // Solo reaccionar a sesiones de nuestra identidad
+                    const isMySession = myAutorizadoId === null
+                        ? data.autorizado_id === null
+                        : data.autorizado_id === myAutorizadoId;
+                    if (!isMySession) return;
+
                     const alert = triggerAlertRef.current;
                     if (payload.eventType === 'INSERT') {
-                        const inserted = payload.new as Session;
-                        prevSessionRef.current = inserted;
-                        setSession(inserted);
+                        prevSessionRef.current = data;
+                        setSession(data);
                         setActiveTab('cuenta');
                         alert?.('🍻 El camarero ha abierto tu cuenta', 'account_opened');
                     } else if (payload.eventType === 'UPDATE') {
-                        const updated = payload.new as Session;
                         const prev = prevSessionRef.current;
-                        prevSessionRef.current = updated;
-                        setSession(cur => cur ? { ...cur, ...updated } : updated);
-
-                        if (prev !== null && updated.total_amount > prev.total_amount) {
+                        prevSessionRef.current = data;
+                        setSession(cur => cur ? { ...cur, ...data } : data);
+                        if (prev !== null && data.total_amount > prev.total_amount) {
                             alert?.('✅ Pedido servido — importe actualizado', 'order_served');
                         }
-                        if (updated.status === 'closing' && prev?.status !== 'closing') {
+                        if (data.status === 'closing' && prev?.status !== 'closing') {
                             alert?.('💳 Tu cuenta está lista para pagar', 'account_closing');
                         }
                     }
@@ -141,7 +160,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [socio.id]); // socio.id is stable — channel lives for the whole session
+    }, [socio.id]); // socio.id estable — autorizadoId via ref
 
     // Realtime: watch line_items — recreates only when session ID actually changes
     // session?.id is a primitive string — stable across re-renders with same session
@@ -224,9 +243,10 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const servedLines = lines.filter(l => l.state === 'served');
 
     const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-        { id: 'cuenta', label: 'Mi Cuenta', icon: <Receipt className="w-4 h-4" /> },
-        { id: 'pedir', label: 'Pedir', icon: <ShoppingCart className="w-4 h-4" /> },
-        { id: 'historial', label: 'Historial', icon: <Clock className="w-4 h-4" /> },
+        { id: 'cuenta',   label: 'Mi Cuenta', icon: <Receipt className="w-4 h-4" /> },
+        { id: 'pedir',    label: 'Pedir',     icon: <ShoppingCart className="w-4 h-4" /> },
+        { id: 'historial',label: 'Historial', icon: <Clock className="w-4 h-4" /> },
+        { id: 'perfil',   label: 'Perfil',    icon: <Settings className="w-4 h-4" /> },
     ];
 
     const handleToggleHistorySession = useCallback(async (sessionId: string) => {
@@ -519,9 +539,19 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                                 <p className="text-xs text-[var(--color-muted-foreground)]">
                                                     {new Date(s.closed_at || s.opened_at).toLocaleString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </p>
-                                                <span className={`badge text-[10px] mt-1 ${s.status === 'closed' ? 'badge-closed' : 'badge-voided'}`}>
-                                                    {s.status === 'closed' ? 'Pagada' : 'Anulada'}
-                                                </span>
+                                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                    <span className={`badge text-[10px] ${s.status === 'closed' ? 'badge-closed' : 'badge-voided'}`}>
+                                                        {s.status === 'closed' ? 'Pagada' : 'Anulada'}
+                                                    </span>
+                                                    {s.autorizado_id && (() => {
+                                                        const aut = autorizados.find(a => a.id === s.autorizado_id);
+                                                        return aut ? (
+                                                            <span className="badge text-[10px] bg-[var(--color-accent)]/20 text-[var(--color-accent)] border border-[var(--color-accent)]/30">
+                                                                {aut.display_name}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <p className="text-2xl font-black">{Number(s.total_amount).toFixed(2)}€</p>
@@ -573,6 +603,11 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                             })
                         )}
                     </div>
+                )}
+
+                {/* ===== PERFIL ===== */}
+                {activeTab === 'perfil' && (
+                    <SocioPerfil socio={socio} />
                 )}
 
                 {/* ===== PHOTO MODAL ===== */}

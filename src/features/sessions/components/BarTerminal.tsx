@@ -7,7 +7,10 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/shared/lib/supabase';
 import type { Session, Socio, MenuItem } from '@/shared/types/domain';
 
-type SessionWithSocio = Session & { socios: Pick<Socio, 'socio_number' | 'display_name'> | null };
+type SessionWithSocio = Session & {
+    socios: Pick<Socio, 'socio_number' | 'display_name'> | null;
+    socio_autorizados: { display_name: string } | null;
+};
 
 interface BarTerminalProps {
     boothId: string;
@@ -79,10 +82,11 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
         return () => { supabase.removeChannel(channel); };
     }, [boothId, router]);
 
-    const filteredSessions = sessions.filter(s =>
-        s.socios?.socio_number?.toString().includes(searchQuery) ||
-        s.socios?.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredSessions = sessions.filter(s => {
+        const name = (s.socio_autorizados?.display_name ?? s.socios?.display_name ?? '').toLowerCase();
+        return s.socios?.socio_number?.toString().includes(searchQuery) ||
+            name.includes(searchQuery.toLowerCase());
+    });
 
     return (
         <div className="h-full flex flex-col pt-4 px-4 pb-0 bg-gradient-to-br from-[#0c0f12] to-[#1a1f26]">
@@ -142,7 +146,9 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                                     </div>
                                     <div className="mt-auto">
                                         <h4 className="text-3xl font-black mb-1 text-[var(--color-secondary)] drop-shadow-sm">#{session.socios?.socio_number || '??'}</h4>
-                                        <p className="text-xs opacity-75 truncate">{session.socios?.display_name || 'Desconocido'}</p>
+                                        <p className="text-xs opacity-75 truncate">
+                                            {session.socio_autorizados?.display_name ?? session.socios?.display_name ?? 'Desconocido'}
+                                        </p>
                                         <div className="mt-4 flex justify-between items-end border-t border-white/10 pt-2">
                                             <span className="text-xs opacity-50">Total</span>
                                             <span className="text-lg font-bold">{Number(session.total_amount).toFixed(2)}€</span>
