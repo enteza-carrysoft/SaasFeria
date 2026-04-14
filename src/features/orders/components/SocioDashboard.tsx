@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { placeMobileOrder } from '../actions';
-import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, Bell, BellOff, ChevronDown, Volume2 } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
+import { useAlertSound, type AlertType } from '@/shared/hooks/useAlertSound';
 import type { Socio, Session, LineItem, MenuCategory, MenuItem } from '@/shared/types/domain';
 
 interface SocioDashboardProps {
@@ -34,6 +35,8 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [lines, setLines] = useState<LineItem[]>(initialLines);
     const [notifStatus, setNotifStatus] = useState<'unsupported' | 'denied' | 'default' | 'granted'>('unsupported');
     const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
+    const [inAppAlert, setInAppAlert] = useState<{ message: string; id: number } | null>(null);
+    const { alert: playAlert } = useAlertSound();
 
     const toggleCategory = (catId: string) => {
         setOpenCategories(prev => {
@@ -95,6 +98,19 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         setNotifStatus('default');
     }, []);
 
+    // Show in-app alert banner with sound + vibration
+    const triggerAlert = useCallback((message: string, type: AlertType = 'generic') => {
+        playAlert({ type });
+        setInAppAlert({ message, id: Date.now() });
+    }, [playAlert]);
+
+    // Auto-dismiss in-app alert after 4s
+    useEffect(() => {
+        if (!inAppAlert) return;
+        const t = setTimeout(() => setInAppAlert(null), 4000);
+        return () => clearTimeout(t);
+    }, [inAppAlert]);
+
     // Realtime: watch sessions for this socio (camarero opens/closes account)
     useEffect(() => {
         const supabase = createClient();
@@ -107,15 +123,20 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                     if (payload.eventType === 'INSERT') {
                         setSession(payload.new as Session);
                         setActiveTab('cuenta');
+                        triggerAlert('🍻 El camarero ha abierto tu cuenta', 'account_opened');
                     } else if (payload.eventType === 'UPDATE') {
-                        setSession(prev => prev ? { ...prev, ...payload.new as Session } : payload.new as Session);
+                        const updated = payload.new as Session;
+                        setSession(prev => prev ? { ...prev, ...updated } : updated);
+                        if (updated.status === 'closing') {
+                            triggerAlert('💳 Tu cuenta está lista para pagar', 'account_closing');
+                        }
                     }
                 }
             )
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [socio.id]);
+    }, [socio.id, triggerAlert]);
 
     // Realtime: watch line_items for the active session (served/pending state changes)
     useEffect(() => {
@@ -136,12 +157,17 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
                 (payload) => {
                     setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l));
+                    // Alert when item goes from pending → served
+                    if (payload.old?.state === 'pending' && payload.new?.state === 'served') {
+                        const menuItem = menuItems.find(m => m.id === payload.new.menu_item_id);
+                        triggerAlert(`✅ Listo: ${menuItem?.name ?? 'Tu pedido'} está servido`, 'order_served');
+                    }
                 }
             )
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [session?.id]);
+    }, [session?.id, menuItems, triggerAlert]);
 
 
     // Cart helpers
@@ -197,8 +223,29 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         { id: 'historial', label: 'Historial', icon: <Clock className="w-4 h-4" /> },
     ];
 
+    const handleTestAlert = useCallback(async () => {
+        // Test in-app alert immediately (no server needed)
+        triggerAlert('🔔 Prueba de alerta — sonido y vibración', 'order_served');
+        // Also test push notification via server (only works if subscribed)
+        if (notifStatus === 'granted') {
+            await fetch('/api/push/test', { method: 'POST' });
+        }
+    }, [triggerAlert, notifStatus]);
+
     return (
         <div className="flex flex-col h-[calc(100dvh-56px)]">
+            {/* In-app alert banner (foreground notifications) */}
+            {inAppAlert && (
+                <div
+                    key={inAppAlert.id}
+                    className="fixed top-16 left-4 right-4 z-50 bg-[var(--color-accent)] text-white px-5 py-3.5 rounded-xl shadow-xl font-bold text-sm animate-fade-in flex items-center gap-3"
+                    onClick={() => setInAppAlert(null)}
+                >
+                    <Volume2 className="w-5 h-5 shrink-0" />
+                    <span className="flex-1">{inAppAlert.message}</span>
+                </div>
+            )}
+
             {/* Success Toast */}
             {orderSuccess && (
                 <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[var(--color-success)] text-gray-900 px-6 py-3 rounded-xl shadow-lg font-bold text-sm animate-fade-in">
@@ -256,28 +303,35 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                                         </span>
                                     </div>
 
-                                    {/* Push notification toggle */}
-                                    {notifStatus !== 'unsupported' && notifStatus !== 'denied' && (
-                                        <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
-                                            {notifStatus === 'granted' ? (
+                                    {/* Notification controls */}
+                                    <div className="mt-4 pt-3 border-t border-[var(--color-border)] flex items-center justify-center gap-3 flex-wrap">
+                                        {notifStatus !== 'unsupported' && notifStatus !== 'denied' && (
+                                            notifStatus === 'granted' ? (
                                                 <button
                                                     onClick={handleDisableNotifications}
-                                                    className="flex items-center gap-2 mx-auto text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+                                                    className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
                                                 >
                                                     <BellOff className="w-3.5 h-3.5" />
-                                                    Notificaciones activas — desactivar
+                                                    Desactivar push
                                                 </button>
                                             ) : (
                                                 <button
                                                     onClick={handleEnableNotifications}
-                                                    className="flex items-center gap-2 mx-auto text-xs text-[var(--color-accent)] hover:text-[var(--color-accent)]/80 font-bold transition-colors"
+                                                    className="flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:text-[var(--color-accent)]/80 font-bold transition-colors"
                                                 >
                                                     <Bell className="w-3.5 h-3.5" />
-                                                    Activar notificaciones
+                                                    Activar push
                                                 </button>
-                                            )}
-                                        </div>
-                                    )}
+                                            )
+                                        )}
+                                        <button
+                                            onClick={handleTestAlert}
+                                            className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors border border-[var(--color-border)] rounded px-2 py-1"
+                                        >
+                                            <Volume2 className="w-3.5 h-3.5" />
+                                            Probar alerta
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Pending Orders */}
