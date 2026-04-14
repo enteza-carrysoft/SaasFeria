@@ -230,8 +230,11 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     ];
 
     const handleTestAlert = useCallback(async () => {
-        // Test in-app alert immediately (no server needed)
-        triggerAlert('🔔 Prueba de alerta — sonido y vibración', 'order_served');
+        const vibrateSupported = 'vibrate' in navigator;
+        const msg = vibrateSupported
+            ? '🔔 Prueba — sonido y vibración'
+            : '🔔 Prueba — sonido (vibración no soportada en este dispositivo)';
+        triggerAlert(msg, 'order_served');
         // Also test push notification via server (only works if subscribed)
         if (notifStatus === 'granted') {
             await fetch('/api/push/test', { method: 'POST' });
