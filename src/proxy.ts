@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     let supabaseResponse = NextResponse.next({
         request,
     });
@@ -68,6 +68,3 @@ export const config = {
         '/((?!_next/static|_next/image|favicon.ico|manifest.json|icons|sw.js).*)',
     ],
 };
-
-// Force Node.js runtime for middleware (not Edge)
-export const runtime = 'nodejs';
