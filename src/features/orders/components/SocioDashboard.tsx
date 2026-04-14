@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { placeMobileOrder, getSocioSessionLines } from '../actions';
 import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
@@ -34,10 +35,12 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
     const [sessionLinesCache, setSessionLinesCache] = useState<Record<string, LineItem[]>>({});
     const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+    const router = useRouter();
     const { alert: playAlert } = useAlertSound();
-    // Refs — stable references that don't cause Realtime channel recreation
-    const prevSessionRef = useRef<Session | null>(initialSession);   // previous session for total comparison
-    const menuItemsRef = useRef<MenuItem[]>(menuItems);               // latest menu items for INSERT handler
+    // Refs — never go in Realtime useEffect deps (stable, no channel recreation)
+    const prevSessionRef = useRef<Session | null>(initialSession);   // previous session for diff-based alerts
+    const menuItemsRef = useRef<MenuItem[]>(menuItems);               // latest menu items for line_items INSERT
+    const triggerAlertRef = useRef<((msg: string, type: AlertType) => void) | null>(null);
 
     const toggleCategory = (catId: string) => {
         setOpenCategories(prev => {
@@ -48,11 +51,32 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         });
     };
 
-    // Sync state when server re-renders
+    // Sync state from server re-renders (router.refresh() polling) + fire alerts on detected changes
     useEffect(() => {
-        setSession(initialSession);
+        const prev = prevSessionRef.current;
         prevSessionRef.current = initialSession;
-    }, [initialSession]);
+        setSession(initialSession);
+
+        // First mount: prev and initialSession are the same object → no spurious alerts
+        if (prev === initialSession) return;
+
+        const alert = triggerAlertRef.current;
+        if (!alert) return;
+
+        if (prev === null && initialSession !== null) {
+            // New session opened while socio was in the app
+            setActiveTab('cuenta');
+            alert('🍻 El camarero ha abierto tu cuenta', 'account_opened');
+        } else if (prev !== null && initialSession !== null) {
+            if (initialSession.total_amount > prev.total_amount) {
+                alert('✅ Pedido servido — importe actualizado', 'order_served');
+            }
+            if (initialSession.status === 'closing' && prev.status !== 'closing') {
+                alert('💳 Tu cuenta está lista para pagar', 'account_closing');
+            }
+        }
+    }, [initialSession]); // triggerAlert via ref — stable, no deps needed
+
     useEffect(() => { setLines(initialLines); }, [initialLines]);
     useEffect(() => { menuItemsRef.current = menuItems; }, [menuItems]);
 
@@ -63,7 +87,7 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         }
     }, []);
 
-    // Show in-app alert banner with sound + vibration
+    // Show in-app alert banner with sound
     const triggerAlert = useCallback((message: string, type: AlertType = 'generic') => {
         playAlert({ type });
         setInAppAlert({ message, id: Date.now() });
@@ -72,6 +96,9 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         }
     }, [playAlert]);
 
+    // Keep ref current so Realtime handlers can call it without being in deps
+    useEffect(() => { triggerAlertRef.current = triggerAlert; }, [triggerAlert]);
+
     // Auto-dismiss in-app alert after 4s
     useEffect(() => {
         if (!inAppAlert) return;
@@ -79,7 +106,8 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
         return () => clearTimeout(t);
     }, [inAppAlert]);
 
-    // Realtime: watch sessions for this socio (camarero opens/closes account)
+    // Realtime: watch sessions — bonus for instant updates when Supabase Realtime is configured
+    // All refs used inside (prevSessionRef, triggerAlertRef) → empty deps → channel created ONCE, never recreated
     useEffect(() => {
         const supabase = createClient();
         const channel = supabase
@@ -88,24 +116,24 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'sessions', filter: `socio_id=eq.${socio.id}` },
                 (payload) => {
+                    const alert = triggerAlertRef.current;
                     if (payload.eventType === 'INSERT') {
-                        setSession(payload.new as Session);
+                        const inserted = payload.new as Session;
+                        prevSessionRef.current = inserted;
+                        setSession(inserted);
                         setActiveTab('cuenta');
-                        triggerAlert('🍻 El camarero ha abierto tu cuenta', 'account_opened');
+                        alert?.('🍻 El camarero ha abierto tu cuenta', 'account_opened');
                     } else if (payload.eventType === 'UPDATE') {
                         const updated = payload.new as Session;
                         const prev = prevSessionRef.current;
-
-                        // Update state (no side effects inside setter)
-                        setSession(cur => cur ? { ...cur, ...updated } : updated);
                         prevSessionRef.current = updated;
+                        setSession(cur => cur ? { ...cur, ...updated } : updated);
 
-                        // Fire alerts based on what changed
                         if (prev !== null && updated.total_amount > prev.total_amount) {
-                            triggerAlert('✅ Pedido servido — importe actualizado', 'order_served');
+                            alert?.('✅ Pedido servido — importe actualizado', 'order_served');
                         }
                         if (updated.status === 'closing' && prev?.status !== 'closing') {
-                            triggerAlert('💳 Tu cuenta está lista para pagar', 'account_closing');
+                            alert?.('💳 Tu cuenta está lista para pagar', 'account_closing');
                         }
                     }
                 }
@@ -113,17 +141,19 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [socio.id, triggerAlert]);
+    }, [socio.id]); // socio.id is stable — channel lives for the whole session
 
-    // Realtime: watch line_items for the active session (served/pending state changes)
+    // Realtime: watch line_items — recreates only when session ID actually changes
+    // session?.id is a primitive string — stable across re-renders with same session
     useEffect(() => {
         if (!session?.id) return;
+        const sid = session.id;
         const supabase = createClient();
         const channel = supabase
-            .channel(`socio-lines-${session.id}`)
+            .channel(`socio-lines-${sid}`)
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
+                { event: 'INSERT', schema: 'public', table: 'line_items', filter: `session_id=eq.${sid}` },
                 (payload) => {
                     const menuItem = menuItemsRef.current.find(m => m.id === payload.new.menu_item_id);
                     setLines(prev => [...prev, { ...payload.new, menu_items: { name: menuItem?.name ?? 'Desconocido' } } as LineItem]);
@@ -131,16 +161,25 @@ export function SocioDashboard({ socio, session: initialSession, lines: initialL
             )
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${session.id}` },
+                { event: 'UPDATE', schema: 'public', table: 'line_items', filter: `session_id=eq.${sid}` },
                 (payload) => {
-                    // payload.old is empty without REPLICA IDENTITY FULL — compare with local state instead
                     setLines(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } as LineItem : l));
                 }
             )
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [session?.id]);
+    }, [session?.id]); // string primitive — only recreates when session truly changes
+
+    // Polling fallback: garantiza actualizaciones aunque Realtime no esté configurado en Supabase.
+    // router.refresh() re-renderiza los Server Components y pasa nuevos props a este componente.
+    // El useEffect([initialSession]) detecta cambios y dispara alertas si el total sube o el estado cambia.
+    // router NO está en ningún deps de los canales Realtime → el polling no destruye los canales.
+    useEffect(() => {
+        const interval = setInterval(() => { router.refresh(); }, 4000);
+        return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // empty deps — router is stable (singleton), interval lives for the whole session
 
 
     // Cart helpers
