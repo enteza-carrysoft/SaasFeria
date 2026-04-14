@@ -30,8 +30,11 @@ export default function LoginPage() {
             return;
         }
 
-        router.push('/app');
-        router.refresh();
+        try {
+            router.push('/app');
+        } catch {
+            setLoading(false);
+        }
     }
 
     return (

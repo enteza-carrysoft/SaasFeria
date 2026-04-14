@@ -3,11 +3,27 @@ import { redirect } from 'next/navigation';
 import type { StaffUser, Socio } from '@/shared/types/domain';
 
 export default async function AppPage() {
-    const supabase = await createServerSupabaseClient();
+    let supabase;
+    try {
+        supabase = await createServerSupabaseClient();
+    } catch {
+        // Missing env vars — show configuration error instead of 500
+        return (
+            <main className="min-h-screen flex items-center justify-center px-4">
+                <div className="glass-card p-8 w-full max-w-md animate-fade-in text-center">
+                    <div className="text-5xl mb-4">⚙️</div>
+                    <h1 className="text-xl font-bold mb-2 text-[var(--color-danger)]">Error de configuración</h1>
+                    <p className="text-sm text-[var(--color-muted-foreground)]">
+                        Faltan variables de entorno de Supabase. Configúralas en el panel de Vercel.
+                    </p>
+                </div>
+            </main>
+        );
+    }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (authError || !user) {
         redirect('/login');
     }
 
@@ -17,7 +33,7 @@ export default async function AppPage() {
         .select('*')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
     const staffUser = staffData as StaffUser | null;
 
     // Check if user is a socio
@@ -26,7 +42,7 @@ export default async function AppPage() {
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
     const socio = socioData as Socio | null;
 
     // Route based on role
