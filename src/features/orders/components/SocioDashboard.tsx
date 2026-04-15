@@ -409,26 +409,24 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
                                             {session.status === 'open' ? 'Cuenta Abierta' : 'Pendiente de Cobro'}
                                         </span>
                                         {session.status === 'closing' && (
-                                            session.voucher_url ? (
-                                                <span className="flex items-center gap-1 text-xs font-bold text-[var(--color-success)]">
-                                                    <CheckCircle className="w-3.5 h-3.5" />
-                                                    Talón guardado
-                                                </span>
-                                            ) : (
-                                                <label className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-info)] text-white ${uploadingVoucher ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
-                                                    <Upload className="w-3.5 h-3.5" />
-                                                    {uploadingVoucher ? 'Subiendo...' : 'Foto Talón'}
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        capture="environment"
-                                                        className="hidden"
-                                                        onChange={(e) => {
-                                                            if (e.target.files?.[0]) handleUploadVoucher(e.target.files[0]);
-                                                        }}
-                                                    />
-                                                </label>
-                                            )
+                                            <label className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full ${uploadingVoucher ? 'opacity-50 pointer-events-none bg-[var(--color-info)] text-white' : session.voucher_url ? 'bg-[var(--color-success)]/20 text-[var(--color-success)] border border-[var(--color-success)]/40 cursor-pointer' : 'bg-[var(--color-info)] text-white cursor-pointer'}`}>
+                                                {uploadingVoucher ? (
+                                                    <><Upload className="w-3.5 h-3.5" /> Subiendo...</>
+                                                ) : session.voucher_url ? (
+                                                    <><CheckCircle className="w-3.5 h-3.5" /> Talón guardado · cambiar</>
+                                                ) : (
+                                                    <><Upload className="w-3.5 h-3.5" /> Foto Talón</>
+                                                )}
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    capture="environment"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        if (e.target.files?.[0]) handleUploadVoucher(e.target.files[0]);
+                                                    }}
+                                                />
+                                            </label>
                                         )}
                                     </div>
 

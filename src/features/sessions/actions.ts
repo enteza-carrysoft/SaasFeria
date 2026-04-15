@@ -279,8 +279,8 @@ export async function uploadAndSaveVoucher(sessionId: string, formData: FormData
 
     const { data: urlData } = adminClient.storage.from('receipts').getPublicUrl(fileName);
 
-    // Persist URL on session
-    const { error: updateError } = await supabase
+    // Persist URL on session — admin client needed (socios cannot UPDATE sessions via RLS)
+    const { error: updateError } = await adminClient
         .from('sessions')
         .update({ voucher_url: urlData.publicUrl })
         .eq('id', sessionId);
