@@ -290,22 +290,34 @@ export async function uploadAndSaveVoucher(sessionId: string, formData: FormData
     revalidatePath('/bar');
 }
 
-// Set session as Closed (Paid) with optional Voucher URL
-export async function paySession(sessionId: string, voucherUrl: string | null = null) {
+// Set session as Closed (Paid)
+export async function paySession(sessionId: string) {
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Recalculate total from ALL line items at close time (pending + served)
+    // to handle edge cases where pending items were never explicitly served
+    const { data: lines } = await supabase
+        .from('line_items')
+        .select('qty, unit_price')
+        .eq('session_id', sessionId);
+
+    const total = (lines ?? []).reduce((sum, l) => sum + l.qty * l.unit_price, 0);
+
+    // NOTE: voucher_url is intentionally NOT updated here — the socio may have
+    // already uploaded it via uploadAndSaveVoucher. Passing null would erase it.
     const { error } = await supabase
         .from('sessions')
         .update({
             status: 'closed',
             closed_by: user?.id,
             closed_at: new Date().toISOString(),
-            voucher_url: voucherUrl
+            total_amount: total,
         })
         .eq('id', sessionId);
 
     if (error) throw new Error(error.message);
     revalidatePath('/bar');
     revalidatePath('/admin');
+    revalidatePath('/socio');
 }

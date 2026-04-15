@@ -121,26 +121,10 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
         }
     };
 
-    const handlePay = async (method: 'cash' | 'voucher', file?: File) => {
+    const handlePay = async () => {
         setLoading(true);
         try {
-            let voucherUrl = null;
-            if (method === 'voucher' && file) {
-                const supabase = createClient();
-                const ext = file.name.split('.').pop();
-                const fileName = `${session.booth_id}/${session.id}_${Date.now()}.${ext}`;
-
-                const { error: uploadError } = await supabase.storage
-                    .from('receipts')
-                    .upload(fileName, file);
-
-                if (uploadError) throw new Error('Error subiendo foto: ' + uploadError.message);
-
-                const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-                voucherUrl = data.publicUrl;
-            }
-
-            await paySession(session.id, voucherUrl);
+            await paySession(session.id);
             router.push('/bar');
         } catch (e) {
             alert('Error al cobrar: ' + (e instanceof Error ? e.message : 'Error'));
@@ -352,7 +336,7 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                             </button>
                         ) : session.status === 'closing' ? (
                             <button
-                                onClick={() => handlePay('cash')}
+                                onClick={() => handlePay()}
                                 disabled={loading}
                                 className="flex-1 py-4 bg-[var(--color-success)] text-gray-900 font-bold rounded-xl text-lg uppercase tracking-wider active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
                             >
