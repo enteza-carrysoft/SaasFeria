@@ -241,6 +241,10 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
     // Group lines by state
     const pendingLines = lines.filter(l => l.state === 'pending');
     const servedLines = lines.filter(l => l.state === 'served');
+    // Total calculado desde lines (pending + served) para reflejar pedidos enviados inmediatamente
+    const linesTotal = lines.reduce((sum, l) => sum + l.qty * l.unit_price, 0);
+    // Usar linesTotal si hay líneas, si no el total de sesión (fallback para sesiones sin líneas cargadas)
+    const displayTotal = lines.length > 0 ? linesTotal : Number(session?.total_amount ?? 0);
 
     const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
         { id: 'cuenta',   label: 'Mi Cuenta', icon: <Receipt className="w-4 h-4" /> },
@@ -342,13 +346,13 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
                                 <div className="glass-card p-6 text-center">
                                     <p className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider mb-1">Total Actual</p>
 
-                                    {/* Importe — parpadea rojo cuando hay pedido listo sin confirmar */}
+                                    {/* Importe — calculado desde line_items para reflejar pedidos pending inmediatamente */}
                                     <button
                                         onClick={() => setPendingCallAlert(false)}
                                         className={`text-5xl font-black w-full text-center transition-colors ${pendingCallAlert ? 'animate-call-blink cursor-pointer' : 'text-[var(--color-foreground)] cursor-default'}`}
                                         aria-label={pendingCallAlert ? 'Pedido listo — toca para confirmar' : undefined}
                                     >
-                                        {Number(session.total_amount).toFixed(2)}€
+                                        {displayTotal.toFixed(2)}€
                                     </button>
 
                                     {pendingCallAlert && (
