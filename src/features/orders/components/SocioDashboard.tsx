@@ -11,6 +11,31 @@ import { useAlertSound, type AlertType } from '@/shared/hooks/useAlertSound';
 import { useIdentity } from '@/shared/components/IdentityGate';
 import type { Socio, Session, LineItem, MenuCategory, MenuItem } from '@/shared/types/domain';
 
+// Reduce image before uploading: phone camera photos are 3-8MB, canvas JPEG ~300KB
+function compressImage(file: File, maxDim = 1920, quality = 0.82): Promise<File> {
+    return new Promise((resolve) => {
+        const img = new window.Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.width * ratio);
+            canvas.height = Math.round(img.height * ratio);
+            canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(
+                (blob) => resolve(blob
+                    ? new File([blob], 'talon.jpg', { type: 'image/jpeg' })
+                    : file   // fallback: send original if canvas fails
+                ),
+                'image/jpeg', quality
+            );
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+    });
+}
+
 interface SocioDashboardProps {
     socio: Socio;
     sessions: Session[];
@@ -120,8 +145,10 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
         if (!session) return;
         setUploadingVoucher(true);
         try {
+            // Comprimir antes de enviar: fotos de cámara son 3-8MB, las reducimos a ~300KB
+            const compressed = await compressImage(file);
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', compressed);
             await uploadAndSaveVoucher(session.id, formData);
         } catch (e) {
             alert('Error: ' + (e instanceof Error ? e.message : 'Error desconocido'));
