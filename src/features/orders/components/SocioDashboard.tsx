@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { placeMobileOrder, getSocioSessionLines } from '../actions';
-import { saveVoucherUrl } from '@/features/sessions/actions';
+import { uploadAndSaveVoucher } from '@/features/sessions/actions';
 import { SocioPerfil } from './SocioPerfil';
 import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X, Settings, Upload, CheckCircle } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
@@ -120,18 +120,9 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
         if (!session) return;
         setUploadingVoucher(true);
         try {
-            const supabase = createClient();
-            const ext = file.name.split('.').pop();
-            const fileName = `${session.booth_id}/${session.id}_${Date.now()}.${ext}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('receipts')
-                .upload(fileName, file);
-
-            if (uploadError) throw new Error('Error subiendo foto: ' + uploadError.message);
-
-            const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-            await saveVoucherUrl(session.id, data.publicUrl);
+            const formData = new FormData();
+            formData.append('file', file);
+            await uploadAndSaveVoucher(session.id, formData);
         } catch (e) {
             alert('Error: ' + (e instanceof Error ? e.message : 'Error desconocido'));
         } finally {

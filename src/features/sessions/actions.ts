@@ -1,6 +1,7 @@
 'use server';
 
 import { createServerSupabaseClient } from '@/shared/lib/supabase-server';
+import { createAdminSupabaseClient } from '@/shared/lib/supabase-admin';
 import { revalidatePath } from 'next/cache';
 import { sendPushToUser } from '@/shared/lib/push';
 
@@ -246,17 +247,45 @@ export async function voidSession(sessionId: string) {
     revalidatePath('/socio');
 }
 
-// Save voucher photo URL on a closing session (uploaded from socio app)
-export async function saveVoucherUrl(sessionId: string, voucherUrl: string) {
+// Upload voucher photo from socio app and save URL on the session.
+// Uses admin client for storage upload to bypass bucket RLS (socios don't have write access).
+export async function uploadAndSaveVoucher(sessionId: string, formData: FormData) {
+    const file = formData.get('file') as File | null;
+    if (!file || file.size === 0) throw new Error('No se recibió ningún archivo.');
+
+    // Verify session exists and is in closing state
     const supabase = await createServerSupabaseClient();
-
-    const { error } = await supabase
+    const { data: session } = await supabase
         .from('sessions')
-        .update({ voucher_url: voucherUrl })
+        .select('booth_id')
         .eq('id', sessionId)
-        .eq('status', 'closing');
+        .eq('status', 'closing')
+        .single();
 
-    if (error) throw new Error(error.message);
+    if (!session) throw new Error('Sesión no encontrada o no está en estado de cobro.');
+
+    // Upload using admin client — bypasses storage RLS
+    const adminClient = createAdminSupabaseClient();
+    const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase();
+    const fileName = `${session.booth_id}/${sessionId}_${Date.now()}.${ext}`;
+
+    const arrayBuffer = await file.arrayBuffer();
+
+    const { error: uploadError } = await adminClient.storage
+        .from('receipts')
+        .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg' });
+
+    if (uploadError) throw new Error('Error subiendo foto: ' + uploadError.message);
+
+    const { data: urlData } = adminClient.storage.from('receipts').getPublicUrl(fileName);
+
+    // Persist URL on session
+    const { error: updateError } = await supabase
+        .from('sessions')
+        .update({ voucher_url: urlData.publicUrl })
+        .eq('id', sessionId);
+
+    if (updateError) throw new Error(updateError.message);
     revalidatePath('/socio');
     revalidatePath('/bar');
 }
