@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { addLineItems, closeSession, paySession } from '../actions';
+import { addLineItems, closeSession, paySession, voidSession } from '../actions';
 import { markItemsServed } from '@/features/kitchen/actions';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/shared/lib/supabase';
-import { Upload, Banknote, Bell } from 'lucide-react';
+import { Banknote, Bell, Ban } from 'lucide-react';
 import type { Session, LineItem, MenuItem, MenuCategory } from '@/shared/types/domain';
 
 interface SessionDetailProps {
@@ -92,6 +92,18 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
         } catch (e) {
             alert('Error al marchar el pedido: ' + (e instanceof Error ? e.message : 'Error'));
         } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVoidSession = async () => {
+        if (!confirm('¿Seguro que quieres anular esta cuenta? No tiene ningún producto.')) return;
+        setLoading(true);
+        try {
+            await voidSession(session.id);
+            router.push('/bar');
+        } catch (e) {
+            alert('Error al anular: ' + (e instanceof Error ? e.message : 'Error'));
             setLoading(false);
         }
     };
@@ -321,42 +333,32 @@ export function SessionDetail({ session: initialSession, lines: initialLines, me
                             >
                                 {loading ? 'Enviando...' : `Marchar Pedido (${totalCart.toFixed(2)}€)`}
                             </button>
+                        ) : session.status === 'open' && lines.length === 0 ? (
+                            <button
+                                onClick={handleVoidSession}
+                                disabled={loading}
+                                className="flex-1 py-4 bg-[var(--color-danger)] text-white font-bold rounded-xl text-lg uppercase tracking-wider active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Ban className="w-5 h-5" />
+                                {loading ? 'Anulando...' : 'Anular Cuenta'}
+                            </button>
                         ) : session.status === 'open' ? (
                             <button
                                 onClick={handleCloseSession}
-                                disabled={loading || lines.length === 0}
+                                disabled={loading}
                                 className="flex-1 py-4 bg-[var(--color-success)] text-gray-900 font-bold rounded-xl text-lg uppercase tracking-wider active:scale-95 transition-transform disabled:opacity-50"
                             >
                                 {loading ? 'Cerrando...' : 'Pedir Cuenta'}
                             </button>
                         ) : session.status === 'closing' ? (
-                            <div className="flex-1 flex gap-2">
-                                <button
-                                    onClick={() => handlePay('cash')}
-                                    disabled={loading}
-                                    className="flex-1 py-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-[var(--color-muted)] transition-colors disabled:opacity-50"
-                                >
-                                    <Banknote className="w-5 h-5" />
-                                    <span className="text-xs font-bold">Efectivo/TPV</span>
-                                </button>
-                                <label
-                                    className={`flex-1 ${loading ? 'opacity-50 pointer-events-none' : 'cursor-pointer'} py-3 bg-[var(--color-info)] text-white rounded-xl flex flex-col items-center justify-center gap-1 hover:brightness-110 transition-colors`}
-                                >
-                                    <Upload className="w-5 h-5" />
-                                    <span className="text-xs font-bold">Foto Talón</span>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        capture="environment"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            if (e.target.files && e.target.files[0]) {
-                                                handlePay('voucher', e.target.files[0]);
-                                            }
-                                        }}
-                                    />
-                                </label>
-                            </div>
+                            <button
+                                onClick={() => handlePay('cash')}
+                                disabled={loading}
+                                className="flex-1 py-4 bg-[var(--color-success)] text-gray-900 font-bold rounded-xl text-lg uppercase tracking-wider active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Banknote className="w-5 h-5" />
+                                {loading ? 'Cerrando...' : 'Efectivo / TPV'}
+                            </button>
                         ) : null}
                     </div>
                 </div>

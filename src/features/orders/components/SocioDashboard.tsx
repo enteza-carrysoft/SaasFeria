@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { placeMobileOrder, getSocioSessionLines } from '../actions';
+import { saveVoucherUrl } from '@/features/sessions/actions';
 import { SocioPerfil } from './SocioPerfil';
-import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X, Settings } from 'lucide-react';
+import { ShoppingCart, Clock, Receipt, Plus, Minus, Send, ChevronDown, Volume2, Image, X, Settings, Upload, CheckCircle } from 'lucide-react';
 import { createClient } from '@/shared/lib/supabase';
 import { useAlertSound, type AlertType } from '@/shared/hooks/useAlertSound';
 import { useIdentity } from '@/shared/components/IdentityGate';
@@ -41,6 +42,7 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
     const [sessionLinesCache, setSessionLinesCache] = useState<Record<string, LineItem[]>>({});
     const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+    const [uploadingVoucher, setUploadingVoucher] = useState(false);
     const router = useRouter();
     const { alert: playAlert } = useAlertSound();
     // Refs — never go in Realtime useEffect deps (stable, no channel recreation)
@@ -113,6 +115,29 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
 
     // Keep ref current so Realtime handlers can call it without being in deps
     useEffect(() => { triggerAlertRef.current = triggerAlert; }, [triggerAlert]);
+
+    const handleUploadVoucher = async (file: File) => {
+        if (!session) return;
+        setUploadingVoucher(true);
+        try {
+            const supabase = createClient();
+            const ext = file.name.split('.').pop();
+            const fileName = `${session.booth_id}/${session.id}_${Date.now()}.${ext}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('receipts')
+                .upload(fileName, file);
+
+            if (uploadError) throw new Error('Error subiendo foto: ' + uploadError.message);
+
+            const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+            await saveVoucherUrl(session.id, data.publicUrl);
+        } catch (e) {
+            alert('Error: ' + (e instanceof Error ? e.message : 'Error desconocido'));
+        } finally {
+            setUploadingVoucher(false);
+        }
+    };
 
     // Auto-dismiss in-app alert after 4s
     useEffect(() => {
@@ -361,10 +386,32 @@ export function SocioDashboard({ socio, sessions, categories, menuItems, history
                                         </p>
                                     )}
 
-                                    <div className="flex items-center justify-center gap-2 mt-3">
+                                    <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
                                         <span className={`badge ${session.status === 'open' ? 'badge-open' : 'badge-closing'}`}>
                                             {session.status === 'open' ? 'Cuenta Abierta' : 'Pendiente de Cobro'}
                                         </span>
+                                        {session.status === 'closing' && (
+                                            session.voucher_url ? (
+                                                <span className="flex items-center gap-1 text-xs font-bold text-[var(--color-success)]">
+                                                    <CheckCircle className="w-3.5 h-3.5" />
+                                                    Talón guardado
+                                                </span>
+                                            ) : (
+                                                <label className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--color-info)] text-white ${uploadingVoucher ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
+                                                    <Upload className="w-3.5 h-3.5" />
+                                                    {uploadingVoucher ? 'Subiendo...' : 'Foto Talón'}
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        capture="environment"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            if (e.target.files?.[0]) handleUploadVoucher(e.target.files[0]);
+                                                        }}
+                                                    />
+                                                </label>
+                                            )
+                                        )}
                                     </div>
 
                                     {/* Test in-app alert */}

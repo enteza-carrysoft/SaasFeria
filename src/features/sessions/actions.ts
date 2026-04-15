@@ -217,6 +217,50 @@ export async function closeSession(sessionId: string) {
     }
 }
 
+// Void an open session that has no line items (cancel without any consumption)
+export async function voidSession(sessionId: string) {
+    const supabase = await createServerSupabaseClient();
+
+    // Server-side guard: no line items allowed
+    const { count } = await supabase
+        .from('line_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', sessionId);
+
+    if (count && count > 0) throw new Error('No se puede anular una cuenta con consumiciones.');
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { error } = await supabase
+        .from('sessions')
+        .update({
+            status: 'voided',
+            closed_by: user?.id,
+            closed_at: new Date().toISOString()
+        })
+        .eq('id', sessionId)
+        .eq('status', 'open');
+
+    if (error) throw new Error(error.message);
+    revalidatePath('/bar');
+    revalidatePath('/socio');
+}
+
+// Save voucher photo URL on a closing session (uploaded from socio app)
+export async function saveVoucherUrl(sessionId: string, voucherUrl: string) {
+    const supabase = await createServerSupabaseClient();
+
+    const { error } = await supabase
+        .from('sessions')
+        .update({ voucher_url: voucherUrl })
+        .eq('id', sessionId)
+        .eq('status', 'closing');
+
+    if (error) throw new Error(error.message);
+    revalidatePath('/socio');
+    revalidatePath('/bar');
+}
+
 // Set session as Closed (Paid) with optional Voucher URL
 export async function paySession(sessionId: string, voucherUrl: string | null = null) {
     const supabase = await createServerSupabaseClient();
