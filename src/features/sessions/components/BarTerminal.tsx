@@ -16,26 +16,23 @@ interface BarTerminalProps {
     boothId: string;
     initialSessions: SessionWithSocio[];
     menuItems: MenuItem[];
-    mobilePendingCounts: Record<string, number>;
+    pendingCounts: Record<string, number>;    // mobile items por revisar (state=pending)
+    kitchenCounts: Record<string, number>;   // items en cocina (state=sent_kitchen)
 }
 
-export function BarTerminal({ boothId, initialSessions, menuItems, mobilePendingCounts: initialCounts }: BarTerminalProps) {
+export function BarTerminal({ boothId, initialSessions, menuItems, pendingCounts: initialPending, kitchenCounts: initialKitchen }: BarTerminalProps) {
     const router = useRouter();
     const [isSessionModalOpen, setSessionModalOpen] = useState(false);
     const [sessions, setSessions] = useState<SessionWithSocio[]>(initialSessions);
-    const [mobilePendingCounts, setMobilePendingCounts] = useState<Record<string, number>>(initialCounts);
+    const [pendingCounts, setPendingCounts] = useState<Record<string, number>>(initialPending);
+    const [kitchenCounts, setKitchenCounts] = useState<Record<string, number>>(initialKitchen);
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Sync local state when server re-renders (after router.refresh())
-    useEffect(() => {
-        setSessions(initialSessions);
-    }, [initialSessions]);
+    useEffect(() => { setSessions(initialSessions); }, [initialSessions]);
+    useEffect(() => { setPendingCounts(initialPending); }, [initialPending]);
+    useEffect(() => { setKitchenCounts(initialKitchen); }, [initialKitchen]);
 
-    useEffect(() => {
-        setMobilePendingCounts(initialCounts);
-    }, [initialCounts]);
-
-    // Realtime: sessions changes → refresh grid; line_items changes → update badge counts
+    // Realtime: sessions → refresh grid; line_items → actualizar badges
     useEffect(() => {
         const supabase = createClient();
         const channel = supabase
@@ -51,10 +48,10 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                 (payload) => {
                     const li = payload.new as { session_id: string; source: string; state: string };
                     if (li.source === 'mobile' && li.state === 'pending') {
-                        setMobilePendingCounts(prev => ({
-                            ...prev,
-                            [li.session_id]: (prev[li.session_id] ?? 0) + 1,
-                        }));
+                        setPendingCounts(prev => ({ ...prev, [li.session_id]: (prev[li.session_id] ?? 0) + 1 }));
+                    }
+                    if (li.state === 'sent_kitchen') {
+                        setKitchenCounts(prev => ({ ...prev, [li.session_id]: (prev[li.session_id] ?? 0) + 1 }));
                     }
                 }
             )
@@ -64,15 +61,27 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                 (payload) => {
                     const li = payload.new as { session_id: string; source: string; state: string };
                     const old = payload.old as { state: string };
-                    if (li.source === 'mobile' && old.state === 'pending' && li.state === 'served') {
-                        setMobilePendingCounts(prev => {
-                            const current = prev[li.session_id] ?? 0;
-                            if (current <= 1) {
-                                const next = { ...prev };
-                                delete next[li.session_id];
-                                return next;
-                            }
-                            return { ...prev, [li.session_id]: current - 1 };
+
+                    // pending → cualquier otra cosa: decrementar pending
+                    if (old.state === 'pending') {
+                        setPendingCounts(prev => {
+                            const n = (prev[li.session_id] ?? 1) - 1;
+                            if (n <= 0) { const next = { ...prev }; delete next[li.session_id]; return next; }
+                            return { ...prev, [li.session_id]: n };
+                        });
+                    }
+
+                    // → sent_kitchen: incrementar kitchen
+                    if (li.state === 'sent_kitchen' && old.state !== 'sent_kitchen') {
+                        setKitchenCounts(prev => ({ ...prev, [li.session_id]: (prev[li.session_id] ?? 0) + 1 }));
+                    }
+
+                    // sent_kitchen → served/cancelled: decrementar kitchen
+                    if (old.state === 'sent_kitchen' && li.state !== 'sent_kitchen') {
+                        setKitchenCounts(prev => {
+                            const n = (prev[li.session_id] ?? 1) - 1;
+                            if (n <= 0) { const next = { ...prev }; delete next[li.session_id]; return next; }
+                            return { ...prev, [li.session_id]: n };
                         });
                     }
                 }
@@ -117,13 +126,17 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                 ) : (
                     <div className="flex flex-wrap gap-3">
                         {filteredSessions.map((session) => {
-                            const mobilePending = mobilePendingCounts[session.id] ?? 0;
+                            const pending = pendingCounts[session.id] ?? 0;
+                            const kitchen = kitchenCounts[session.id] ?? 0;
+                            const hasAlerts = pending > 0 || kitchen > 0;
+
                             const cardStyle =
                                 session.status !== 'open'
                                     ? 'bg-[var(--color-warning)] text-gray-900 border-yellow-500 animate-pulse'
-                                    : mobilePending > 0
+                                    : pending > 0 || kitchen > 0
                                         ? 'bg-gradient-to-br from-amber-500/30 to-amber-900/20 border-amber-400/80 shadow-[0_0_14px_rgba(245,166,35,0.35)]'
                                         : 'bg-gradient-to-br from-[var(--color-card)] to-[#151a21] border-[var(--color-border)] hover:border-[var(--color-accent)]';
+
                             return (
                                 <Link
                                     href={`/bar/session/${session.id}`}
@@ -138,17 +151,26 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                                         )}
                                     </div>
                                     <div className="mt-auto">
-                                        {mobilePending > 0 && (
-                                            <p className="text-[10px] font-bold text-amber-300 mb-0.5">
-                                                📱 {mobilePending} pedido{mobilePending > 1 ? 's' : ''}
-                                            </p>
+                                        {/* Badges dobles */}
+                                        {hasAlerts && (
+                                            <div className="flex flex-col gap-0.5 mb-0.5">
+                                                {pending > 0 && (
+                                                    <p className="text-[10px] font-bold text-amber-300 leading-tight">
+                                                        📱 {pending} por revisar
+                                                    </p>
+                                                )}
+                                                {kitchen > 0 && (
+                                                    <p className="text-[10px] font-bold text-blue-300 leading-tight">
+                                                        🍳 {kitchen} en cocina
+                                                    </p>
+                                                )}
+                                            </div>
                                         )}
                                         <h4 className="text-xl font-black leading-none text-white">#{session.socios?.socio_number || '??'}</h4>
                                         <p className="text-[10px] opacity-60 truncate mt-0.5">
                                             {session.socio_autorizados?.display_name ?? session.socios?.display_name ?? 'Desconocido'}
                                         </p>
-                                        <div className="mt-2 flex justify-between items-center border-t border-white/10 pt-1.5">
-                                            <span className="text-[9px] opacity-40">Total</span>
+                                        <div className="mt-2 border-t border-white/10 pt-1.5 text-right">
                                             <span className="text-xs font-bold">{Number(session.total_amount).toFixed(2)}€</span>
                                         </div>
                                     </div>
@@ -163,7 +185,7 @@ export function BarTerminal({ boothId, initialSessions, menuItems, mobilePending
                 <OpenSessionModal
                     boothId={boothId}
                     onClose={() => setSessionModalOpen(false)}
-                    onSuccess={(id) => null /* Navigate to it implicitly as Next.js will reload route, or we can push router */}
+                    onSuccess={(_id) => null}
                 />
             )}
         </div>

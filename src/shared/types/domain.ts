@@ -41,12 +41,12 @@ export interface LineItem {
     menu_item_id: string;
     qty: number;
     unit_price: number;
-    state: 'pending' | 'served';
+    state: 'pending' | 'sent_kitchen' | 'served' | 'cancelled';
     source: 'bar' | 'mobile';
     created_by?: string | null;
     idempotency_key?: string | null;
     created_at: string;
-    menu_items?: { name: string } | null;
+    menu_items?: { name: string; prep_type?: 'bar' | 'kitchen' } | null;
 }
 
 export interface MenuCategory {

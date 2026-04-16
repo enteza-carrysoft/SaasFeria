@@ -22,8 +22,8 @@ export default async function BarPage() {
 
     const boothId = (staffData as { booth_id: string }).booth_id;
 
-    // Fetch sessions and mobile pending counts in parallel
-    const [sessions, menuData, pendingLineItems] = await Promise.all([
+    // Fetch sessions, menu and both badge counts in parallel
+    const [sessions, menuData, pendingItems, kitchenItems] = await Promise.all([
         getActiveSessions(boothId).catch(() => []),
         supabase
             .from('menu_items')
@@ -36,12 +36,22 @@ export default async function BarPage() {
             .select('session_id')
             .eq('source', 'mobile')
             .eq('state', 'pending'),
+        supabase
+            .from('line_items')
+            .select('session_id')
+            .eq('state', 'sent_kitchen'),
     ]);
 
-    // Build a count map: session_id → number of pending mobile orders
-    const mobilePendingCounts: Record<string, number> = {};
-    for (const li of pendingLineItems.data ?? []) {
-        mobilePendingCounts[li.session_id] = (mobilePendingCounts[li.session_id] ?? 0) + 1;
+    // session_id → count of mobile pending items (por revisar)
+    const pendingCounts: Record<string, number> = {};
+    for (const li of pendingItems.data ?? []) {
+        pendingCounts[li.session_id] = (pendingCounts[li.session_id] ?? 0) + 1;
+    }
+
+    // session_id → count of items currently in kitchen
+    const kitchenCounts: Record<string, number> = {};
+    for (const li of kitchenItems.data ?? []) {
+        kitchenCounts[li.session_id] = (kitchenCounts[li.session_id] ?? 0) + 1;
     }
 
     return (
@@ -49,7 +59,8 @@ export default async function BarPage() {
             boothId={boothId}
             initialSessions={sessions}
             menuItems={(menuData.data ?? []) as MenuItem[]}
-            mobilePendingCounts={mobilePendingCounts}
+            pendingCounts={pendingCounts}
+            kitchenCounts={kitchenCounts}
         />
     );
 }

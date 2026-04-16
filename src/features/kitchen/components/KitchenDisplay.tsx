@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/shared/lib/supabase';
-import { markItemsServed, type KitchenOrderItem } from '../actions';
+import type { KitchenOrderItem } from '../actions';
 
 interface KitchenDisplayProps {
     boothId: string;
@@ -42,7 +42,6 @@ function elapsedMinutes(iso: string): number {
 export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
     const router = useRouter();
     const [items, setItems] = useState<KitchenOrderItem[]>(initialItems);
-    const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
     const [activeSessionIds, setActiveSessionIds] = useState<Set<string>>(
         () => new Set(initialItems.map(i => i.session_id))
     );
@@ -53,7 +52,7 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
         setActiveSessionIds(new Set(initialItems.map(i => i.session_id)));
     }, [initialItems]);
 
-    // Realtime: line_items changes
+    // Realtime: escucha sent_kitchen (aparece) y served (desaparece)
     useEffect(() => {
         const supabase = createClient();
 
@@ -63,10 +62,9 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'line_items' },
                 (payload) => {
-                    const li = payload.new as { id: string; session_id: string; state: string; source: string; qty: number; unit_price: number; created_at: string };
-                    // Only add if this session belongs to our booth and is pending
-                    if (li.state === 'pending' && activeSessionIds.has(li.session_id)) {
-                        // We need item_name, socio info — do a refresh to get complete data
+                    const li = payload.new as { id: string; session_id: string; state: string };
+                    // Camarero añadió desde POS un item de cocina
+                    if (li.state === 'sent_kitchen') {
                         router.refresh();
                     }
                 }
@@ -76,12 +74,16 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
                 { event: 'UPDATE', schema: 'public', table: 'line_items' },
                 (payload) => {
                     const updated = payload.new as { id: string; state: string };
+                    // Camarero marcó como entregado → desaparece del display
                     if (updated.state === 'served') {
                         setItems(prev => prev.filter(i => i.id !== updated.id));
                     }
+                    // Camarero también puede enviar a cocina vía UPDATE (si venía de pending)
+                    if (updated.state === 'sent_kitchen') {
+                        router.refresh();
+                    }
                 }
             )
-            // Watch sessions to know about new opens / closes for this booth
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'sessions', filter: `booth_id=eq.${boothId}` },
@@ -91,7 +93,6 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
                     if (sess.status === 'open' || sess.status === 'closing') {
                         setActiveSessionIds(prev => new Set([...prev, sess.id]));
                     } else {
-                        // Closed/voided — remove from set and remove its items
                         setActiveSessionIds(prev => {
                             const next = new Set(prev);
                             next.delete(sess.id);
@@ -104,25 +105,7 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [boothId, router, activeSessionIds]);
-
-    const handleMarkServed = useCallback(async (ids: string[]) => {
-        setLoadingIds(prev => new Set([...prev, ...ids]));
-        // Optimistic: remove from display immediately
-        setItems(prev => prev.filter(i => !ids.includes(i.id)));
-        try {
-            await markItemsServed(ids);
-        } catch {
-            // On error, refresh to restore correct state
-            router.refresh();
-        } finally {
-            setLoadingIds(prev => {
-                const next = new Set(prev);
-                ids.forEach(id => next.delete(id));
-                return next;
-            });
-        }
-    }, [router]);
+    }, [boothId, router]);
 
     const groups = groupBySession(items);
 
@@ -141,8 +124,6 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
             {groups.map(group => {
                 const elapsed = elapsedMinutes(group.since);
                 const isUrgent = elapsed >= 10;
-                const allIds = group.items.map(i => i.id);
-                const allLoading = allIds.every(id => loadingIds.has(id));
 
                 return (
                     <div
@@ -176,50 +157,23 @@ export function KitchenDisplay({ boothId, initialItems }: KitchenDisplayProps) {
                             </div>
                         </div>
 
-                        {/* Items */}
+                        {/* Items — read-only, cocina no interactúa */}
                         <div className="flex-1 divide-y divide-[var(--color-border)]">
-                            {group.items.map(item => {
-                                const isLoading = loadingIds.has(item.id);
-                                return (
-                                    <div key={item.id} className="flex items-center justify-between px-4 py-3 gap-2">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="text-lg font-black text-[var(--color-accent)] w-6 text-center flex-shrink-0">
-                                                {item.qty}×
-                                            </span>
-                                            <span className="text-sm font-medium truncate">{item.item_name}</span>
-                                        </div>
-                                        <button
-                                            onClick={() => handleMarkServed([item.id])}
-                                            disabled={isLoading}
-                                            className="flex-shrink-0 h-8 w-8 rounded-full bg-[var(--color-success)]/20 hover:bg-[var(--color-success)] text-[var(--color-success)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-40"
-                                            title="Marcar listo y avisar al socio si es el último"
-                                        >
-                                            {isLoading ? (
-                                                <span className="text-xs animate-spin">⟳</span>
-                                            ) : (
-                                                <span className="text-sm">✓</span>
-                                            )}
-                                        </button>
-                                    </div>
-                                );
-                            })}
+                            {group.items.map(item => (
+                                <div key={item.id} className="flex items-center px-4 py-3 gap-2">
+                                    <span className="text-lg font-black text-[var(--color-accent)] w-6 text-center flex-shrink-0">
+                                        {item.qty}×
+                                    </span>
+                                    <span className="text-sm font-medium">{item.item_name}</span>
+                                </div>
+                            ))}
                         </div>
 
-                        {/* Footer: Todo Listo */}
+                        {/* Footer informativo */}
                         <div className="px-4 py-3 border-t border-[var(--color-border)]">
-                            {group.items.length > 1 ? (
-                                <button
-                                    onClick={() => handleMarkServed(allIds)}
-                                    disabled={allLoading}
-                                    className="w-full py-2 rounded-xl bg-[var(--color-success)] hover:bg-[var(--color-success)]/80 text-white font-bold text-sm transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
-                                >
-                                    {allLoading ? 'Avisando...' : '✓ Todo listo — Avisar al socio 🔔'}
-                                </button>
-                            ) : (
-                                <p className="text-[10px] text-center text-[var(--color-muted-foreground)]">
-                                    Al marcar ✓ se avisa automáticamente al socio 🔔
-                                </p>
-                            )}
+                            <p className="text-[10px] text-center text-[var(--color-muted-foreground)]">
+                                El camarero confirmará la entrega
+                            </p>
                         </div>
                     </div>
                 );
